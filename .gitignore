@@ -1,0 +1,10 @@
+**/node_modules/
+**/.env
+**/.expo/
+**/*.log
+**/.mysql/
+**/.mysql.local.cnf
+**/.mysql.init.sql
+backend/storage/private/*
+!backend/storage/private/.gitkeep
+.DS_Store

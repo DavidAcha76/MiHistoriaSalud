@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "MiHistoria Salud",
+    "slug": "mihistoria-salud",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.hermesoft.mihistoriasalud",
+      "permissions": []
+    },
+    "ios": {
+      "bundleIdentifier": "com.hermesoft.mihistoriasalud",
+      "supportsTablet": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

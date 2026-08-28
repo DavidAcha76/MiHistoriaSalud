@@ -1,0 +1,17 @@
+import React, { useCallback, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { apiRequest } from '../api/client';
+import { AppTitle, Card, Chip, Field, Muted, PrimaryButton, Screen } from '../components/ui';
+import { ProfileSelector } from '../components/ProfileSelector';
+import { useProfiles } from '../context/ProfileContext';
+import type { EventType, PagedEvents } from '../types/domain';
+import { colors } from '../theme/colors';
+
+const types: Array<{ value: '' | EventType; label: string }> = [{ value:'',label:'Todos'},{value:'ANTECEDENT',label:'Antecedente'},{value:'CONSULTATION',label:'Consulta'},{value:'DIAGNOSIS',label:'Diagnóstico declarado'},{value:'TREATMENT',label:'Tratamiento'},{value:'MEDICATION',label:'Medicamento'},{value:'ALLERGY',label:'Alergia'},{value:'VACCINE',label:'Vacuna'},{value:'SURGERY',label:'Cirugía'},{value:'LAB_RESULT',label:'Laboratorio'},{value:'OTHER',label:'Otro'}];
+export function TimelineScreen({ navigation }: any) {
+  const { selectedProfile } = useProfiles(); const [data,setData]=useState<PagedEvents | null>(null); const [q,setQ]=useState(''); const [from,setFrom]=useState(''); const [to,setTo]=useState(''); const [type,setType]=useState<''|EventType>(''); const [loading,setLoading]=useState(false);
+  const load = useCallback(async () => { if (!selectedProfile) return; setLoading(true); try { const qs = new URLSearchParams({ pageSize:'50' }); if(q.trim()) qs.set('q',q.trim()); if(from.trim()) qs.set('from',from.trim()); if(to.trim()) qs.set('to',to.trim()); if(type) qs.set('type',type); setData(await apiRequest(`/profiles/${selectedProfile.id}/events?${qs.toString()}`)); } catch(e:any){ Alert.alert('Error',e.message); } finally{setLoading(false);} }, [selectedProfile?.id,q,from,to,type]);
+  useFocusEffect(useCallback(()=>{load();},[selectedProfile?.id,type]));
+  return <Screen><AppTitle title="Línea de tiempo" subtitle="Busca y filtra los registros cronológicos del perfil."/><ProfileSelector/><Field label="Buscar" value={q} onChangeText={setQ} placeholder="Título, descripción o fuente"/><View style={{flexDirection:'row',gap:10}}><View style={{flex:1}}><Field label="Desde" value={from} onChangeText={setFrom} placeholder="AAAA-MM-DD"/></View><View style={{flex:1}}><Field label="Hasta" value={to} onChangeText={setTo} placeholder="AAAA-MM-DD"/></View></View><PrimaryButton title="Buscar" onPress={load} loading={loading}/><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginVertical:10}}>{types.map(t=><Chip key={t.value||'all'} label={t.label} selected={type===t.value} onPress={()=>setType(t.value)}/>)}</ScrollView><PrimaryButton title="+ Nuevo evento" onPress={()=>navigation.navigate('EventForm')}/>{data?.items?.map(e=><Pressable key={e.id} onPress={()=>navigation.navigate('EventDetail',{eventId:e.id})}><Card><View style={{flexDirection:'row',justifyContent:'space-between',gap:10}}><Text style={{fontWeight:'800',color:colors.text,flex:1}}>{e.title}</Text><Text style={{fontSize:12,color:colors.primary,fontWeight:'800'}}>{e.eventDate}</Text></View><Muted>{types.find(t=>t.value===e.eventType)?.label || e.eventType}{e.source?` · ${e.source}`:''}</Muted>{e.description?<Text numberOfLines={2} style={{marginTop:8,color:colors.text}}>{e.description}</Text>:null}</Card></Pressable>)}{data && !data.items.length?<Card><Muted>No se encontraron registros con esos filtros.</Muted></Card>:null}</Screen>;
+}
