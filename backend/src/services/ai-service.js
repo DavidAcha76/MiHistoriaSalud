@@ -92,3 +92,39 @@ Devuelve SOLO JSON válido con las claves summary, incompleteData, contradiction
   output.disclaimer = fixedDisclaimer;
   return { provider: 'deepseek', model: env.ai.model, output };
 }
+
+function demoChatReply(message) {
+  const normalized = message.toLowerCase();
+  if (/(diagn[oó]stico|enfermedad|tratamiento|medicamento|urgencia|emergencia)/i.test(normalized)) {
+    return 'Puedo ayudarte a ordenar lo que registraste y a preparar preguntas neutrales para una consulta, pero no puedo diagnosticar, indicar tratamientos ni decidir una urgencia. Si tienes una preocupación de salud, contacta a un profesional de salud.';
+  }
+  return 'Puedo ayudarte a convertir lo que escribiste en un registro claro: qué molestia fue, desde cuándo, intensidad de 0 a 10, cuánto duró, qué la empeoró o alivió y cómo afectó tus actividades. También puedo ayudarte a redactar preguntas para tu próxima consulta.';
+}
+
+export async function answerOrganizerChat(history, message) {
+  if (env.ai.mockMode) return { provider: 'local-demo', model: 'deterministic-demo', content: demoChatReply(message) };
+  if (!env.ai.apiKey) throw new HttpError(503, 'La API de DeepSeek no está configurada.');
+
+  const system = `Eres un asistente para organizar un historial personal de salud.
+REGLAS OBLIGATORIAS:
+- No diagnostiques, no evalúes urgencias, no declares riesgos ni indiques tratamientos, estudios, medicamentos o cambios de dosis.
+- No sustituyas a un profesional de salud.
+- Ayuda únicamente a ordenar información ya proporcionada, proponer campos de registro y redactar preguntas neutrales para una consulta.
+- Si se solicita consejo médico, explica brevemente el límite y sugiere conversar con un profesional de salud.
+- Responde de forma breve, clara y en español.`;
+  const messages = history.slice(-12).map((item) => ({ role: item.role === 'USER' ? 'user' : 'assistant', content: item.content }));
+  messages.push({ role: 'user', content: message });
+  const response = await fetch(`${env.ai.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.ai.apiKey}` },
+    body: JSON.stringify({ model: env.ai.model, temperature: 0.1, messages: [{ role: 'system', content: system }, ...messages] }),
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!response.ok) throw new HttpError(502, 'El proveedor de IA no respondió correctamente.');
+  const raw = await response.json();
+  const content = String(raw?.choices?.[0]?.message?.content || '').trim();
+  if (!content) throw new HttpError(502, 'La respuesta del asistente llegó vacía.');
+  const inspection = inspectAiOutput({ summary: content, incompleteData: [], contradictions: [], questions: [] });
+  if (!inspection.safe) throw new HttpError(422, 'La salida del asistente fue bloqueada por las reglas de seguridad.', { flags: inspection.matches });
+  return { provider: 'deepseek', model: env.ai.model, content: content.slice(0, 3000) };
+}

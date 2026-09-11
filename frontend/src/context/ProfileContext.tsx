@@ -34,7 +34,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { refreshProfiles(); }, [user?.id]);
+  useEffect(() => { void refreshProfiles().catch(() => {}); }, [user?.id]);
 
   async function selectProfile(id: string) {
     if (!profiles.some((p) => p.id === id)) return;

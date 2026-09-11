@@ -1,6 +1,7 @@
 import { app } from './app.js';
 import { env, validateProductionSecrets } from './config/env.js';
 import { pingDb } from './config/db.js';
+import { startAiScheduler } from './services/ai-scheduler-service.js';
 
 validateProductionSecrets();
 
@@ -14,5 +15,6 @@ try {
 }
 
 app.listen(env.port, '0.0.0.0', () => {
-  console.log(`MiHistoria Salud API escuchando en http://0.0.0.0:${env.port}`);
+  console.log(`Clinicsoft API escuchando en http://0.0.0.0:${env.port}`);
+  startAiScheduler();
 });

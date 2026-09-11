@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
 export function Screen({ children, scroll = true }: { children: React.ReactNode; scroll?: boolean }) {
@@ -31,6 +32,22 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
   return <Pressable onPress={onPress} disabled={!onPress} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>;
 }
 
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+export function MenuTile({ icon, label, hint, onPress, badge, tone = 'primary' }: { icon: IconName; label: string; hint: string; onPress: () => void; badge?: number; tone?: 'primary' | 'accent' | 'ai' | 'warning' }) {
+  const palette = {
+    primary: { background: '#E7F6F8', color: colors.primary },
+    accent: { background: '#E8F7F3', color: colors.accent },
+    ai: { background: '#F1ECFF', color: colors.ai },
+    warning: { background: '#FFF4DC', color: colors.warning }
+  }[tone];
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.menuTile, pressed && { transform: [{ scale: .98 }], opacity: .9 }]}>
+    <View style={[styles.menuIcon, { backgroundColor: palette.background }]}><MaterialCommunityIcons name={icon} size={24} color={palette.color} />{badge ? <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge > 9 ? '9+' : badge}</Text></View> : null}</View>
+    <Text style={styles.menuLabel}>{label}</Text><Text style={styles.menuHint} numberOfLines={2}>{hint}</Text>
+  </Pressable>;
+}
+
+export function MenuGrid({ children }: { children: React.ReactNode }) { return <View style={styles.menuGrid}>{children}</View>; }
+
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   screen: { padding: 18, paddingBottom: 40, width: '100%', maxWidth: 980, alignSelf: 'center' },
@@ -51,5 +68,12 @@ export const styles = StyleSheet.create({
   chip: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#EDF2F5', borderRadius: 999, marginRight: 8, marginBottom: 8 },
   chipSelected: { backgroundColor: colors.primary },
   chipText: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  chipTextSelected: { color: '#fff' }
+  chipTextSelected: { color: '#fff' },
+  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
+  menuTile: { width: '48.5%', minHeight: 142, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, justifyContent: 'space-between', shadowColor: '#0F2632', shadowOpacity: .04, shadowRadius: 8, elevation: 1 },
+  menuIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  menuBadge: { position: 'absolute', right: -7, top: -7, minWidth: 19, height: 19, paddingHorizontal: 4, borderRadius: 10, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
+  menuBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  menuLabel: { color: colors.text, fontSize: 15, fontWeight: '900' },
+  menuHint: { color: colors.muted, fontSize: 12, lineHeight: 16, marginTop: 3 }
 });

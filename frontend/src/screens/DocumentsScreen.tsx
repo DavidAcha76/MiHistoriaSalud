@@ -15,7 +15,7 @@ const safeName = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, '_').slice
 export function DocumentsScreen({ navigation }: any) {
   const { selectedProfile } = useProfiles();
   const [docs, setDocs] = useState<ClinicalDocument[]>([]);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!selectedProfile) return;

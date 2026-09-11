@@ -1,21 +1,35 @@
 import { Platform } from 'react-native';
 import type { User } from '../types/domain';
 
+declare const process: { env: Record<string, string | undefined> };
+
 const DEFAULT_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:4000/api' : 'http://localhost:4000/api';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
-let onRefresh: ((session: { accessToken: string; refreshToken: string; user: User }) => void | Promise<void>) | null = null;
-let refreshPromise: Promise<boolean> | null = null;
+type RefreshHandler = (session: { accessToken: string; refreshToken: string; user: User }) => void | Promise<void>;
+type SessionInvalidHandler = () => void | Promise<void>;
+let onRefresh: RefreshHandler | null = null;
+let onSessionInvalid: SessionInvalidHandler | null = null;
+type RefreshResult = 'refreshed' | 'invalid' | 'unavailable' | 'missing';
+let refreshPromise: Promise<RefreshResult> | null = null;
 
-export function configureApiSession(tokens: { accessToken: string | null; refreshToken: string | null }, callback?: typeof onRefresh) {
+type SessionHandlers = {
+  onRefresh?: RefreshHandler;
+  onSessionInvalid?: SessionInvalidHandler;
+};
+
+export function configureApiSession(tokens: { accessToken: string | null; refreshToken: string | null }, handlers?: SessionHandlers) {
   accessToken = tokens.accessToken;
   refreshToken = tokens.refreshToken;
-  if (callback !== undefined) onRefresh = callback;
+  if (handlers) {
+    onRefresh = handlers.onRefresh || null;
+    onSessionInvalid = handlers.onSessionInvalid || null;
+  }
 }
 
-async function refreshSession(): Promise<boolean> {
-  if (!refreshToken) return false;
+async function refreshSession(): Promise<RefreshResult> {
+  if (!refreshToken) return 'missing';
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
@@ -24,14 +38,20 @@ async function refreshSession(): Promise<boolean> {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken, deviceInfo: 'Expo React Native' })
         });
-        if (!response.ok) return false;
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            await onSessionInvalid?.();
+            return 'invalid';
+          }
+          return 'unavailable';
+        }
         const data = await response.json();
         accessToken = data.accessToken;
         refreshToken = data.refreshToken;
         await onRefresh?.(data);
-        return true;
+        return 'refreshed';
       } catch {
-        return false;
+        return 'unavailable';
       } finally {
         refreshPromise = null;
       }
@@ -40,11 +60,19 @@ async function refreshSession(): Promise<boolean> {
   return refreshPromise;
 }
 
+function sessionRenewalUnavailable() {
+  return new Error('No se pudo renovar la sesión. Conservamos el acceso local e inténtalo cuando vuelva la conexión.');
+}
+
 export async function apiFetchRaw(path: string, options: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(options.headers || {});
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (response.status === 401 && retry && await refreshSession()) return apiFetchRaw(path, options, false);
+  if (response.status === 401 && retry) {
+    const refresh = await refreshSession();
+    if (refresh === 'refreshed') return apiFetchRaw(path, options, false);
+    if (refresh === 'unavailable') throw sessionRenewalUnavailable();
+  }
   if (!response.ok) {
     let message = `Error HTTP ${response.status}`;
     try {
@@ -62,7 +90,11 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, ret
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (response.status === 401 && retry && await refreshSession()) return apiRequest<T>(path, options, false);
+  if (response.status === 401 && retry) {
+    const refresh = await refreshSession();
+    if (refresh === 'refreshed') return apiRequest<T>(path, options, false);
+    if (refresh === 'unavailable') throw sessionRenewalUnavailable();
+  }
   if (response.status === 204) return undefined as T;
   const isJson = response.headers.get('content-type')?.includes('application/json');
   const body = isJson ? await response.json() : await response.text();

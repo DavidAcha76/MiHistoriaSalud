@@ -1,4 +1,4 @@
-# Arquitectura de MiHistoria Salud
+# Arquitectura de Clinicsoft
 
 ## Diagrama lógico
 

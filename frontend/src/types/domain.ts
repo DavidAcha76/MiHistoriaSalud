@@ -8,7 +8,7 @@ export type HealthProfile = {
   relationship: 'SELF' | 'CHILD' | 'PARENT' | 'OTHER';
   notes?: string | null;
 };
-export type EventType = 'ANTECEDENT' | 'CONSULTATION' | 'DIAGNOSIS' | 'TREATMENT' | 'MEDICATION' | 'ALLERGY' | 'VACCINE' | 'SURGERY' | 'LAB_RESULT' | 'OTHER';
+export type EventType = 'ANTECEDENT' | 'CONSULTATION' | 'DIAGNOSIS' | 'TREATMENT' | 'MEDICATION' | 'ALLERGY' | 'VACCINE' | 'SURGERY' | 'LAB_RESULT' | 'SYMPTOM' | 'OTHER';
 export type HealthEvent = {
   id: string;
   profileId?: string;
@@ -27,6 +27,7 @@ export type HealthEvent = {
 export type ClinicalDocument = {
   id: string;
   eventId?: string | null;
+  event_id?: string | null;
   originalName?: string;
   original_name?: string;
   mimeType?: string;
@@ -46,4 +47,29 @@ export type AiResult = {
   contradictions: string[];
   questions: string[];
   disclaimer: string;
+};
+export type SymptomRecurrence = { symptomName: string; occurrences: number; firstRecordedAt: string; lastRecordedAt: string; activeOccurrences: number };
+export type PlanCode = 'FREE' | 'SILVER' | 'GOLD';
+export type SubscriptionPlan = {
+  code: PlanCode;
+  name: string;
+  monthlyPrice: number;
+  analysisEveryDays: number;
+  weeklyChatLimit: number | null;
+  simulated: boolean;
+  subscription: {
+    status: 'FREE' | 'SIMULATED_ACTIVE' | 'CANCELED';
+    activatedAt: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    canceledAt: string | null;
+    autoRenews: boolean;
+  };
+};
+export type PlanStatus = {
+  plan: SubscriptionPlan;
+  consent: { granted: boolean; grantedAt: string | null };
+  chat: { usedThisWeek: number; limit: number | null; resetsAt: string };
+  analysis: { everyDays: number; lastAnalysisAt: string | null; nextAnalysisAt: string | null; availableNow: boolean };
 };

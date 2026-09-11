@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const installSession = async (data: { accessToken: string; refreshToken: string; user: User }) => {
     await persist(data);
     setUser(data.user);
-    configureApiSession({ accessToken: data.accessToken, refreshToken: data.refreshToken }, installSession);
+    configureApiSession({ accessToken: data.accessToken, refreshToken: data.refreshToken }, { onRefresh: installSession, onSessionInvalid: clearSession });
   };
 
   useEffect(() => {
@@ -42,14 +42,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           storage.getItem(REFRESH_KEY),
           storage.getItem(USER_KEY)
         ]);
-        configureApiSession({ accessToken: a, refreshToken: r }, installSession);
-        if (u && r) setUser(JSON.parse(u));
+        configureApiSession({ accessToken: a, refreshToken: r }, { onRefresh: installSession, onSessionInvalid: clearSession });
+        if (u && r) {
+          try { setUser(JSON.parse(u)); }
+          catch { await clearSession(); return; }
+        }
         if (r) {
           try {
             const me = await apiRequest<{ id: string; email: string; fullName: string }>('/auth/me');
             setUser({ id: me.id, email: me.email, fullName: me.fullName });
-          } catch {
-            await clearSession();
+          } catch (error: any) {
+            if ([401, 403, 404].includes(error?.status)) await clearSession();
           }
         }
       } finally { setLoading(false); }

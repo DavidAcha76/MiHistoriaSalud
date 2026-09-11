@@ -13,6 +13,7 @@ const number = (value, fallback) => {
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: number(process.env.PORT, 4000),
+  appBaseUrl: (process.env.APP_BASE_URL || `http://localhost:${number(process.env.PORT, 4000)}`).replace(/\/$/, ''),
   corsOrigin: process.env.CORS_ORIGIN || '*',
   db: {
     host: process.env.DB_HOST || '127.0.0.1',
@@ -26,7 +27,7 @@ export const env = {
     accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-me',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me',
     accessTtl: process.env.JWT_ACCESS_TTL || '15m',
-    refreshDays: number(process.env.JWT_REFRESH_DAYS, 30)
+    refreshDays: number(process.env.JWT_REFRESH_DAYS, 180)
   },
   storage: {
     driver: process.env.STORAGE_DRIVER || 'local',
@@ -56,6 +57,6 @@ export const env = {
 
 export function validateProductionSecrets() {
   if (env.nodeEnv !== 'production') return;
-  const weak = [env.jwt.accessSecret, env.jwt.refreshSecret].some((x) => x.includes('change-me') || x.length < 32);
+  const weak = [env.jwt.accessSecret, env.jwt.refreshSecret].some((x) => /change-me|cambia-esta|dev-|secret/i.test(x) || x.length < 32) || env.jwt.accessSecret === env.jwt.refreshSecret;
   if (weak) throw new Error('JWT_ACCESS_SECRET y JWT_REFRESH_SECRET deben ser secretos robustos en producción.');
 }
