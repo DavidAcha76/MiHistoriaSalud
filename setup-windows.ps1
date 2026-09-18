@@ -2,16 +2,16 @@ $ErrorActionPreference = "Stop"
 Write-Host "== MiHistoria Salud: preparación ==" -ForegroundColor Cyan
 
 Set-Location "$PSScriptRoot\backend"
-if (!(Test-Path ".env")) { Copy-Item ".env.example" ".env"; Write-Host "Se creó backend/.env. Revisa DB_PASSWORD si corresponde." -ForegroundColor Yellow }
-npm install
-npm run db:setup
+if (!(Test-Path ".env")) { throw 'Configura backend/.env con las credenciales de la base remota.' }
+npm.cmd ci
+if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias del backend.' }
 
 Set-Location "$PSScriptRoot\frontend"
-if (!(Test-Path ".env")) { Copy-Item ".env.example" ".env"; Write-Host "Se creó frontend/.env. Para teléfono físico configura la IP LAN del API." -ForegroundColor Yellow }
-npm install
-npx expo install --fix
+if (!(Test-Path ".env")) { Set-Content -Path '.env' -Value 'EXPO_PUBLIC_API_URL=' -Encoding utf8 }
+npm.cmd ci
+if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias del frontend.' }
 
 Write-Host "Listo." -ForegroundColor Green
-Write-Host "Terminal 1: cd backend; npm run dev"
-Write-Host "Terminal 2 WEB: cd frontend; npm run web"
-Write-Host "Terminal 2 ANDROID: cd frontend; npm run android"
+Set-Location $PSScriptRoot
+Write-Host "Inicia todo: powershell -ExecutionPolicy Bypass -File .\start-local.ps1"
+Write-Host "Web: http://localhost:8081. App: escanea el QR con Expo Go."

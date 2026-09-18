@@ -6,8 +6,10 @@
   "engines": { "node": ">=22.0.0" },
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
+    "start": "node server.js",
+    "deploy:prepare": "node scripts/prepare-monsterasp.js",
     "db:create": "node scripts/create-db.js",
+    "db:check": "node scripts/check-db.js",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
     "db:setup": "npm run db:create && npm run db:migrate && npm run db:seed",

@@ -1,12 +1,17 @@
+import { useFeedback } from '../context/FeedbackContext';
 import React, { useState } from 'react';
-import { Alert, Platform, Text } from 'react-native';
+import { Platform } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { AppAlert as Alert } from '../utils/alerts';
 import * as DocumentPicker from 'expo-document-picker';
 import { apiRequest } from '../api/client';
 import { AppTitle, Card, Muted, PrimaryButton, Screen } from '../components/ui';
 import { useProfiles } from '../context/ProfileContext';
 import { colors } from '../theme/colors';
+import { ProfileSelector } from '../components/ProfileSelector';
 
 export function DocumentUploadScreen({ route, navigation }: any) {
+  const notify = useFeedback();
   const { selectedProfile } = useProfiles();
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +39,7 @@ export function DocumentUploadScreen({ route, navigation }: any) {
       }
       if (eventId) form.append('eventId', eventId);
       await apiRequest(`/profiles/${selectedProfile.id}/documents`, { method: 'POST', body: form });
-      Alert.alert('Documento guardado', 'El archivo fue almacenado de forma privada.');
+      notify('Documento guardado.');
       navigation.goBack();
     } catch (e: any) {
       Alert.alert('No se pudo subir', e.message);
@@ -43,14 +48,15 @@ export function DocumentUploadScreen({ route, navigation }: any) {
     }
   }
 
-  return <Screen>
-    <AppTitle title="Subir documento" subtitle="Se aceptan PDF, JPG, PNG y WEBP desde Android, iOS o navegador web." />
-    <PrimaryButton title="Seleccionar archivo" onPress={pick} />
+  return <Screen form>
+    <AppTitle title="Subir documento" subtitle="Elige una foto o un archivo PDF de tu receta o resultado. Después toca Guardar documento." />
+    <ProfileSelector locked />
+    <PrimaryButton title="1. Seleccionar archivo" onPress={pick} />
     {file ? <Card>
       <Text style={{ fontWeight: '800', color: colors.text }}>{file.name}</Text>
       <Muted>{file.mimeType || 'Tipo desconocido'} · {file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Tamaño no informado'}</Muted>
     </Card> : <Card><Muted>Aún no seleccionaste un archivo.</Muted></Card>}
     {eventId ? <Card><Muted>Este documento quedará vinculado al evento desde el que abriste esta pantalla.</Muted></Card> : null}
-    <PrimaryButton title="Guardar documento" onPress={upload} loading={loading} disabled={!file} />
+    <PrimaryButton title="2. Guardar documento" onPress={upload} loading={loading} disabled={!file || !selectedProfile} />
   </Screen>;
 }

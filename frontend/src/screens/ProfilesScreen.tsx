@@ -1,5 +1,7 @@
 import React, { useCallback } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { AppAlert as Alert } from '../utils/alerts';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
 import { AppTitle, Card, Muted, PrimaryButton, Screen, SecondaryButton } from '../components/ui';

@@ -1,14 +1,23 @@
 {
   "expo": {
-    "name": "Clinicsoft",
+    "name": "Clinia",
     "slug": "mihistoria-salud",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/brand/clinia-logo.png",
+    "splash": {
+      "image": "./assets/brand/clinia-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0C1B24"
+    },
     "android": {
       "package": "com.hermesoft.mihistoriasalud",
-      "permissions": []
+      "permissions": [],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/clinia-logo.png",
+        "backgroundColor": "#0C1B24"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.hermesoft.mihistoriasalud",
@@ -20,7 +29,8 @@
     ],
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/brand/clinia-logo.png"
     }
   }
 }

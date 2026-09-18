@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { View } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { AppAlert as Alert } from '../utils/alerts';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
@@ -83,11 +85,11 @@ export function PlanScreen({ navigation }: any) {
   const hasPaidPlan = activePlan?.code === 'SILVER' || activePlan?.code === 'GOLD';
 
   return <Screen>
-    <AppTitle title="Plan de Clinicsoft" subtitle="Elige un plan visible y simple. Los montos, ciclos y renovaciones que ves aquí son una simulación mensual." />
+    <AppTitle title="Plan de Clinia" subtitle="Elige un plan visible y simple. Los montos, ciclos y renovaciones que ves aquí son una simulación mensual." />
     <ProfileSelector />
-    {activePlan ? <Card style={{ backgroundColor: '#EEF8F8', borderColor: colors.primary }}>
+    {activePlan ? <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primary }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: '#D2F0F2', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name={activePlan.code === 'GOLD' ? 'crown-outline' : activePlan.code === 'SILVER' ? 'medal-outline' : 'leaf-circle-outline'} size={26} color={colors.primary} /></View>
+        <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name={activePlan.code === 'GOLD' ? 'crown-outline' : activePlan.code === 'SILVER' ? 'medal-outline' : 'leaf-circle-outline'} size={26} color={colors.primary} /></View>
         <View style={{ flex: 1 }}><Text style={{ color: colors.primary, fontWeight: '900', fontSize: 18 }}>Plan {activePlan.name}</Text><Muted>{price(activePlan.monthlyPrice)} · Simulación sin cobro</Muted></View>
       </View>
       {hasPaidPlan ? <>
@@ -97,22 +99,22 @@ export function PlanScreen({ navigation }: any) {
     </Card> : <Card><Muted>Cargando el plan…</Muted></Card>}
 
     <SectionTitle>Planes mensuales simulados</SectionTitle>
-    <Card style={{ backgroundColor: '#F6F2FF', borderColor: '#E3DBFF' }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Sin tarjeta ni pasarela de pago</Text><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
-    {plans.map((plan) => <Card key={plan.code} style={{ borderColor: activePlan?.code === plan.code ? colors.primary : colors.border, backgroundColor: activePlan?.code === plan.code ? '#FBFEFE' : colors.surface }}>
+    <Card style={{ backgroundColor: colors.aiSoft, borderColor: colors.ai }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Sin tarjeta ni pasarela de pago</Text><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
+    {plans.map((plan) => <Card key={plan.code} style={{ borderColor: activePlan?.code === plan.code ? colors.primary : colors.border, backgroundColor: activePlan?.code === plan.code ? colors.primarySoft : colors.surface }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><MaterialCommunityIcons name={plan.icon} size={26} color={plan.code === 'GOLD' ? colors.warning : colors.primary} /><View style={{ flex: 1 }}><Text style={{ fontSize: 19, fontWeight: '900', color: colors.text }}>{plan.title}</Text><Text style={{ color: colors.primary, fontWeight: '900', marginTop: 1 }}>{price(plan.monthlyPrice)}</Text></View>{activePlan?.code === plan.code ? <Text style={{ color: colors.primary, fontWeight: '900' }}>ACTUAL</Text> : null}</View>
       {plan.benefits.map((benefit) => <Muted key={benefit}>• {benefit}</Muted>)}
       {plan.code === 'FREE' ? <SecondaryButton title={activePlan?.code === 'FREE' ? 'Plan actual' : 'Incluido sin costo'} onPress={() => {}} disabled /> : <PrimaryButton title={busy === plan.code ? 'Activando…' : activePlan?.code === plan.code ? 'Plan actual' : `Simular ${plan.title} por ${price(plan.monthlyPrice)}`} disabled={activePlan?.code === plan.code} loading={busy === plan.code} onPress={() => confirmActivation(plan)} />}
     </Card>)}
 
     <SectionTitle>Administrar suscripción</SectionTitle>
-    {hasPaidPlan ? <Card style={{ borderColor: activePlan?.subscription.cancelAtPeriodEnd ? '#E8C56A' : colors.border, backgroundColor: activePlan?.subscription.cancelAtPeriodEnd ? '#FFF9E8' : colors.surface }}>
+    {hasPaidPlan ? <Card style={{ borderColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warning : colors.border, backgroundColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warningSoft : colors.surface }}>
       <Text style={{ color: colors.text, fontWeight: '900' }}>{activePlan?.subscription.cancelAtPeriodEnd ? 'Tu cancelación está programada' : '¿Quieres cancelar este plan?'}</Text>
       <Muted>{activePlan?.subscription.cancelAtPeriodEnd ? `Mantendrás ${activePlan?.name} hasta el ${formatDate(activePlan?.subscription.currentPeriodEnd || null)}. Puedes reanudar antes de esa fecha.` : 'Cancelar no reduce tus beneficios inmediatamente: el cambio a Gratis ocurre al cerrar el período mensual simulado.'}</Muted>
       {activePlan?.subscription.cancelAtPeriodEnd ? <PrimaryButton title={busy === 'resume' ? 'Reanudando…' : 'Reanudar renovación simulada'} onPress={resumePlan} loading={busy === 'resume'} /> : <PrimaryButton title={busy === 'cancel' ? 'Programando…' : 'Cancelar plan al finalizar el período'} onPress={confirmCancellation} loading={busy === 'cancel'} danger />}
     </Card> : <Card><Text style={{ color: colors.text, fontWeight: '900' }}>No tienes un plan de pago activo</Text><Muted>El plan Gratis no se cobra y no requiere cancelación.</Muted></Card>}
 
     <SectionTitle>Consentimiento de IA</SectionTitle>
-    <Card><Text style={{ color: colors.text, lineHeight: 20 }}>Al activarlo, permites que la app procese los registros de este perfil para revisiones informativas programadas y el asistente de organización. No diagnostica ni indica tratamientos.</Text><SecondaryButton title={status?.consent.granted ? 'Retirar consentimiento' : 'Autorizar uso de IA'} onPress={() => setConsent(!status?.consent.granted)} /></Card>
+    <Card><Text style={{ color: colors.text, lineHeight: 25 }}>Al activarlo, permites que la app procese los registros de este perfil para revisiones informativas programadas y el asistente de organización. No diagnostica ni indica tratamientos.</Text><SecondaryButton title={status?.consent.granted ? 'Retirar consentimiento' : 'Autorizar uso de IA'} onPress={() => setConsent(!status?.consent.granted)} /></Card>
     <SecondaryButton title="Abrir asistente de organización" onPress={() => navigation.navigate('Chat')} />
   </Screen>;
 }

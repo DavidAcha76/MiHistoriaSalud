@@ -49,6 +49,21 @@ export type AiResult = {
   disclaimer: string;
 };
 export type SymptomRecurrence = { symptomName: string; occurrences: number; firstRecordedAt: string; lastRecordedAt: string; activeOccurrences: number };
+export type MedicationDoseSlot = { scheduledDate: string; scheduledTime: string };
+export type MedicationAdherence = { confirmed: number; total: number; missed: number; percentage: number; pending: MedicationDoseSlot[] };
+export type MedicationRegimen = {
+  id: string;
+  profileId: string;
+  medicationName: string;
+  dose?: string | null;
+  scheduleDays: number[];
+  scheduleTimes: string[];
+  startDate: string;
+  endDate?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  adherence: MedicationAdherence;
+};
 export type PlanCode = 'FREE' | 'SILVER' | 'GOLD';
 export type SubscriptionPlan = {
   code: PlanCode;

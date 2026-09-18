@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Clinia - símbolo médico</title>
+  <desc id="desc">Cruz médica de líneas redondeadas integrada con una hoja y un estetoscopio.</desc>
+  <g fill="none" stroke="#9B2CFF" stroke-width="58" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M350 250V185C350 153 376 127 408 127H592C624 127 650 153 650 185V250"/>
+    <path d="M280 350H190C158 350 132 376 132 408V592C132 624 158 650 190 650H280"/>
+    <path d="M350 720V815C350 847 376 873 408 873H592C624 873 650 847 650 815V720"/>
+    <path d="M720 350H810C842 350 868 376 868 408V592C868 624 842 650 810 650H755"/>
+    <path d="M315 430C392 449 451 510 502 596C555 685 622 702 680 658C725 624 748 567 748 510"/>
+    <path d="M315 430C333 543 391 610 502 596"/>
+    <circle cx="748" cy="462" r="66"/>
+    <circle cx="748" cy="462" r="24" stroke-width="42"/>
+  </g>
+</svg>

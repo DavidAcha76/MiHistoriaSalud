@@ -1,14 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import mysql from 'mysql2/promise';
-import { env } from '../src/config/env.js';
+import { backendRoot } from '../src/config/env.js';
+import { createDatabaseConnection } from '../src/config/mysql-connection.js';
 
-const migrationsDir = path.resolve(process.cwd(), 'database/migrations');
+const migrationsDir = path.resolve(backendRoot, 'database/migrations');
 const files = (await fs.readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
-const conn = await mysql.createConnection({
-  host: env.db.host, port: env.db.port, user: env.db.user, password: env.db.password,
-  database: env.db.name, multipleStatements: true, charset: 'utf8mb4'
-});
+const conn = await createDatabaseConnection({ multipleStatements: true });
 try {
   await conn.query(`CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   const [applied] = await conn.query('SELECT name FROM schema_migrations');

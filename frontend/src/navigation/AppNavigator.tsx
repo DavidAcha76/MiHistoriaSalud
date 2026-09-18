@@ -1,11 +1,11 @@
 import React from 'react';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Pressable, Text, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -23,30 +23,24 @@ import { PlanScreen } from '../screens/PlanScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ShareScreen } from '../screens/ShareScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { MedicationScheduleScreen } from '../screens/MedicationScheduleScreen';
+import { MedicationFormScreen } from '../screens/MedicationFormScreen';
+import { AppTabBar } from '../components/AppTabBar';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
-
-function tabIcon(name: string): keyof typeof MaterialCommunityIcons.glyphMap {
-  if (name === 'Inicio') return 'home-variant-outline';
-  if (name === 'Historial') return 'timeline-text-outline';
-  if (name === 'IA') return 'star-four-points-outline';
-  return 'dots-grid';
-}
+const navigationTheme = { ...DarkTheme, colors: { ...DarkTheme.colors, primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border, notification: colors.danger } };
 
 function MainTabs() {
-  return <Tabs.Navigator screenOptions={({ route }) => ({
+  const { width, fontScale } = useWindowDimensions();
+  return <Tabs.Navigator tabBar={(props) => <AppTabBar {...props} />} screenOptions={{
     headerShown: false,
-    tabBarActiveTintColor: colors.primary,
-    tabBarInactiveTintColor: '#7B8994',
-    tabBarHideOnKeyboard: true,
-    tabBarLabelStyle: { fontWeight: '800', fontSize: 11, marginTop: 1 },
-    tabBarStyle: { height: 68, paddingTop: 7, paddingBottom: 9, borderTopColor: '#DCE6EA', backgroundColor: '#FFFFFF' },
-    tabBarIcon: ({ color, size, focused }) => <MaterialCommunityIcons name={tabIcon(route.name)} size={focused ? size + 1 : size} color={color} />
-  })}>
+    tabBarPosition: width >= 1100 && fontScale < 1.4 ? 'left' : 'bottom',
+    animation: 'none'
+  }}>
     <Tabs.Screen name="Inicio" component={HomeScreen} />
+    <Tabs.Screen name="Medicinas" component={MedicationScheduleScreen} />
     <Tabs.Screen name="Historial" component={TimelineScreen} />
-    <Tabs.Screen name="IA" component={AIScreen} options={{ title: 'IA' }} />
     <Tabs.Screen name="Más" component={MoreScreen} />
   </Tabs.Navigator>;
 }
@@ -54,9 +48,10 @@ function MainTabs() {
 export function AppNavigator() {
   const { user, loading } = useAuth();
   if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color={colors.primary} />;
-  return <NavigationContainer><Stack.Navigator screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontWeight: '900' } }}>
+  return <NavigationContainer theme={navigationTheme}><Stack.Navigator screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
     {user ? <>
       <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+      <Stack.Screen name="IA" component={AIScreen} options={{ title: 'Revisión con IA' }} />
       <Stack.Screen name="EventForm" component={EventFormScreen} options={{ title: 'Registrar evento' }} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: 'Detalle' }} />
       <Stack.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documentos clínicos' }} />
@@ -68,6 +63,8 @@ export function AppNavigator() {
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: 'Plan y uso de IA' }} />
       <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Asistente de organización' }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Avisos' }} />
+      <Stack.Screen name="MedicationSchedule" component={MedicationScheduleScreen} options={{ title: 'Medicamentos y tomas' }} />
+      <Stack.Screen name="MedicationForm" component={MedicationFormScreen} options={{ title: 'Registrar medicamento' }} />
     </> : <>
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Crear cuenta' }} />

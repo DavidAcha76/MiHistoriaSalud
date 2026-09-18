@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { AppAlert as Alert } from '../utils/alerts';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
 import { AppTitle, Card, Field, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
@@ -66,7 +68,7 @@ export function ShareScreen() {
     <SectionTitle>Documentos seleccionados</SectionTitle>
     {documents.map((document) => { const selected = documentIds.includes(document.id); return <Pressable key={document.id} onPress={() => toggle(document.id, documentIds, setDocumentIds)}><Card style={{ borderColor: selected ? colors.primary : colors.border }}><Text style={{ color: colors.text, fontWeight: '800' }}>{selected ? '☑' : '☐'} {document.originalName || document.original_name}</Text><Muted>{document.mimeType || document.mime_type}</Muted></Card></Pressable>; })}
     <PrimaryButton title="Crear enlace temporal" onPress={createPackage} loading={busy} />
-    {shareUrl ? <Card style={{ backgroundColor: '#EEF8F8' }}><Text style={{ color: colors.primary, fontWeight: '900' }}>Enlace para el consultor</Text><Field label="Comparte este enlace" value={shareUrl} editable={false} selectTextOnFocus /></Card> : null}
+    {shareUrl ? <Card style={{ backgroundColor: colors.primarySoft }}><Text style={{ color: colors.primary, fontWeight: '900' }}>Enlace para el consultor</Text><Field label="Comparte este enlace" value={shareUrl} editable={false} selectTextOnFocus /></Card> : null}
     <SecondaryButton title="Descargar una copia de mis datos" onPress={exportData} />
     <SectionTitle>Enlaces creados</SectionTitle>
     {packages.map((item) => <Card key={item.id}><Text style={{ color: colors.text, fontWeight: '800' }}>{item.title}</Text><Muted>{item.revokedAt ? 'Revocado' : `Vence: ${new Date(item.expiresAt).toLocaleString()}`}{item.lastAccessedAt ? ` · abierto: ${new Date(item.lastAccessedAt).toLocaleString()}` : ''}</Muted>{!item.revokedAt ? <SecondaryButton title="Revocar enlace" onPress={() => revoke(item.id)} /> : null}</Card>)}

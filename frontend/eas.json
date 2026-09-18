@@ -1,8 +1,22 @@
 {
   "cli": { "version": ">= 16.0.0" },
   "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
-    "production": { "autoIncrement": true }
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "env": { "APP_VARIANT": "local", "EXPO_PUBLIC_API_URL": "" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "environment": "preview",
+      "env": { "APP_VARIANT": "production", "EXPO_PUBLIC_API_URL": "https://api.clinia.win/api" }
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "env": { "APP_VARIANT": "production", "EXPO_PUBLIC_API_URL": "https://api.clinia.win/api" }
+    }
   }
 }

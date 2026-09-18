@@ -1,5 +1,12 @@
 **/node_modules/
 **/.env
+**/.env.*
+**/*.[pP]ublish[sS]ettings
+**/.npm-cache/
+**/dist/
+**/dist-*/
+**/android/
+**/ios/
 **/.expo/
 **/*.log
 **/.mysql/
@@ -8,3 +15,4 @@
 backend/storage/private/*
 !backend/storage/private/.gitkeep
 .DS_Store
+frontend/.ui-qa/

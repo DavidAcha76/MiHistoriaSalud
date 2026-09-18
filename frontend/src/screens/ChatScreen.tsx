@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { View } from 'react-native';
+import { AppText as Text } from '../components/AppText';
+import { AppAlert as Alert } from '../utils/alerts';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
 import { AppTitle, Card, Field, Muted, PrimaryButton, Screen, SecondaryButton } from '../components/ui';
@@ -41,8 +43,8 @@ export function ChatScreen({ navigation }: any) {
   return <Screen>
     <AppTitle title="Asistente de organización" subtitle="Te ayuda a ordenar registros y preparar preguntas. No diagnostica, decide urgencias ni indica tratamientos." />
     <ProfileSelector />
-    {!chatAvailable ? <Card style={{ backgroundColor: '#FFF7E8' }}><Text style={{ fontWeight: '800', color: colors.text }}>El asistente requiere consentimiento de IA y plan Plata u Oro.</Text><SecondaryButton title="Ver planes" onPress={() => navigation.navigate('Plan')} /></Card> : null}
-    {messages.map((message, index) => <Card key={message.id || index} style={{ backgroundColor: message.role === 'USER' ? '#EEF8F8' : '#F6F2FF', marginLeft: message.role === 'USER' ? 28 : 0 }}><Text style={{ fontSize: 12, color: colors.muted, fontWeight: '800' }}>{message.role === 'USER' ? 'Tú' : 'Asistente'}</Text><Text style={{ marginTop: 5, color: colors.text, lineHeight: 21 }}>{message.content}</Text></Card>)}
+    {!chatAvailable ? <Card style={{ backgroundColor: colors.warningSoft }}><Text style={{ fontWeight: '800', color: colors.text }}>El asistente requiere consentimiento de IA y plan Plata u Oro.</Text><SecondaryButton title="Ver planes" onPress={() => navigation.navigate('Plan')} /></Card> : null}
+    {messages.map((message, index) => <Card key={message.id || index} style={{ backgroundColor: message.role === 'USER' ? colors.primarySoft : colors.aiSoft, marginLeft: message.role === 'USER' ? 28 : 0 }}><Text style={{ fontSize: 16, color: colors.muted, fontWeight: '800' }}>{message.role === 'USER' ? 'Tú' : 'Asistente'}</Text><Text style={{ marginTop: 5, color: colors.text, lineHeight: 25 }}>{message.content}</Text></Card>)}
     {!messages.length ? <Card><Muted>Ejemplo: “Ayúdame a convertir esta molestia en un registro claro”.</Muted></Card> : null}
     <View style={{ opacity: chatAvailable ? 1 : .55 }}><Field label="Mensaje" value={text} onChangeText={setText} multiline placeholder="Describe qué quieres ordenar o registrar" editable={Boolean(chatAvailable) && !sending} /><PrimaryButton title="Enviar" onPress={send} disabled={!chatAvailable || !text.trim()} loading={sending} /></View>
   </Screen>;

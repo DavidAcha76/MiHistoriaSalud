@@ -1,20 +1,40 @@
 import { app } from './app.js';
 import { env, validateProductionSecrets } from './config/env.js';
-import { pingDb } from './config/db.js';
+import { db, pingDb } from './config/db.js';
 import { startAiScheduler } from './services/ai-scheduler-service.js';
+import { startMedicationScheduler } from './services/medication-service.js';
+import { log, logError } from './utils/logger.js';
 
 validateProductionSecrets();
 
+let shuttingDown = false;
+async function stop(reason, error, exitCode = 1) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (error) logError(reason, error);
+  else log('info', reason);
+  try { await db.end(); } catch (closeError) { logError('database_pool_close_failed', closeError); }
+  process.exit(exitCode);
+}
+process.on('uncaughtException', (error) => { void stop('uncaught_exception', error); });
+process.on('unhandledRejection', (reason) => { void stop('unhandled_rejection', reason); });
+
 try {
   await pingDb();
-  console.log(`MySQL conectado: ${env.db.host}:${env.db.port}/${env.db.name}`);
+  log('info', 'database_connected');
 } catch (error) {
-  console.error('No se pudo conectar a MySQL. Ejecuta npm run db:setup y revisa .env.');
-  console.error(error.message);
-  process.exit(1);
+  await stop('database_startup_failed', error);
 }
 
-app.listen(env.port, '0.0.0.0', () => {
-  console.log(`Clinicsoft API escuchando en http://0.0.0.0:${env.port}`);
+const server = app.listen(env.port, '0.0.0.0', () => {
+  log('info', 'api_listening', { port: env.port });
   startAiScheduler();
+  startMedicationScheduler();
 });
+server.on('error', (error) => { void stop('http_server_failed', error); });
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    log('info', 'shutdown_requested', { signal });
+    server.close(() => { void stop('http_server_stopped', null, 0); });
+  });
+}

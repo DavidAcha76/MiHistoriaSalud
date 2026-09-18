@@ -1,10 +1,17 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { resolveApiUrl } from './resolve-api-url';
 import type { User } from '../types/domain';
 
 declare const process: { env: Record<string, string | undefined> };
 
-const DEFAULT_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:4000/api' : 'http://localhost:4000/api';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+const API_URL = resolveApiUrl({
+  configuredUrl: process.env.EXPO_PUBLIC_API_URL,
+  development: __DEV__,
+  platform: Platform.OS,
+  webHostname: Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.hostname : undefined,
+  expoHostUri: Constants.expoConfig?.hostUri
+});
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 type RefreshHandler = (session: { accessToken: string; refreshToken: string; user: User }) => void | Promise<void>;
@@ -99,7 +106,10 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, ret
   const isJson = response.headers.get('content-type')?.includes('application/json');
   const body = isJson ? await response.json() : await response.text();
   if (!response.ok) {
-    const message = typeof body === 'object' && body?.error ? body.error : `Error HTTP ${response.status}`;
+    const details = typeof body === 'object' && Array.isArray(body?.details)
+      ? [...new Set(body.details.map((detail: unknown) => typeof detail === 'object' && detail && 'message' in detail ? String(detail.message) : '').filter(Boolean))]
+      : [];
+    const message = details.length ? details.join('\n') : typeof body === 'object' && body?.error ? body.error : `Error HTTP ${response.status}`;
     const error = new Error(message) as Error & { status?: number; details?: unknown };
     error.status = response.status;
     error.details = typeof body === 'object' ? body?.details : undefined;
