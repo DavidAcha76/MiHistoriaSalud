@@ -14,7 +14,16 @@ export function errorHandler(err, req, res, _next) {
     });
   }
   if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'El archivo excede el tamaño permitido.' });
-  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, details: err.details });
+  if (err instanceof HttpError) {
+    if (err.status >= 500) {
+      const code = /^AI_[A-Z_]+$/.test(err.details?.code || '') ? err.details.code : 'HTTP_SERVICE_ERROR';
+      logError('http_service_failed', { name: 'HttpError', code }, {
+        requestId: req.requestId, method: req.method, status: err.status,
+        ...(Number.isInteger(err.details?.providerStatus) ? { providerStatus: err.details.providerStatus } : {})
+      });
+    }
+    return res.status(err.status).json({ error: err.message, details: err.details, requestId: req.requestId });
+  }
   logError('http_request_failed', err, {
     requestId: req.requestId,
     method: req.method,

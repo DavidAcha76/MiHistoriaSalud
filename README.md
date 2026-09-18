@@ -35,7 +35,7 @@ Los ZIP web y backend se descomprimen en `/wwwroot` de sus respectivos sitios. N
 
 Las conexiones están en `backend/.env` y `backend/.env.production`. Verifica el acceso con `npm.cmd run db:check` y aplica las migraciones una sola vez antes de iniciar la API. Los archivos de entorno están excluidos del repositorio; no se utilizan archivos de ejemplo.
 
-Conexión verificada: usuario y base `db65746`. El hosting responde con MariaDB 10.11.15 (protocolo MySQL); las migraciones 001 a 007 se aplicaron correctamente. El código conserva sintaxis compatible con MySQL 8.0.
+Conexión verificada: usuario y base `db65746`. El hosting responde con MariaDB 10.11.15 (protocolo MySQL); las migraciones 001 a 008 se aplicaron correctamente. El código conserva sintaxis compatible con MySQL 8.0.
 
 Instrucciones completas: [Pruebas y despliegue](docs/PRUEBAS-Y-DESPLIEGUE.md).
 

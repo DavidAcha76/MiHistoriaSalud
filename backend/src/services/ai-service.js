@@ -28,8 +28,25 @@ export function getAiAvailability() {
   return { available: env.ai.mockMode || Boolean(env.ai.apiKey), mode: env.ai.mockMode ? 'demo' : 'live' };
 }
 
+function providerFailure(status) {
+  const failures = {
+    401: ['AI_PROVIDER_AUTH', 'La IA no está disponible por un problema de configuración del servicio. Contacta al soporte.'],
+    403: ['AI_PROVIDER_AUTH', 'La IA no está disponible por un problema de configuración del servicio. Contacta al soporte.'],
+    402: ['AI_PROVIDER_BALANCE', 'La IA no está disponible por falta de saldo del servicio. Tu cupo no se consumió.'],
+    400: ['AI_PROVIDER_REQUEST', 'El servicio de IA requiere un ajuste de configuración. Contacta al soporte.'],
+    404: ['AI_PROVIDER_MODEL', 'El modelo de IA configurado no está disponible. Contacta al soporte.'],
+    422: ['AI_PROVIDER_REQUEST', 'El servicio de IA requiere un ajuste de configuración. Contacta al soporte.'],
+    429: ['AI_PROVIDER_BUSY', 'El servicio de IA está ocupado. Intenta nuevamente en unos minutos; tu cupo no se consumió.'],
+    503: ['AI_PROVIDER_BUSY', 'El servicio de IA está ocupado. Intenta nuevamente en unos minutos; tu cupo no se consumió.']
+  };
+  const [code, message] = failures[status] || ['AI_PROVIDER_FAILED', 'El proveedor de IA no respondió correctamente. Intenta más tarde.'];
+  // Never relay the provider body: it can contain credentials or selected data.
+  // Keep upstream authentication failures separate from the user's app session.
+  return new HttpError(502, message, { code, providerStatus: status });
+}
+
 async function requestCompletion(payload) {
-  if (!env.ai.apiKey) throw new HttpError(503, 'El servicio de IA aún no está disponible. Intenta más tarde.');
+  if (!env.ai.apiKey) throw new HttpError(503, 'El servicio de IA aún no está disponible. Intenta más tarde.', { code: 'AI_NOT_CONFIGURED' });
   try {
     const response = await fetch(`${env.ai.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -37,7 +54,7 @@ async function requestCompletion(payload) {
       body: JSON.stringify({ model: env.ai.model, temperature: 0.1, thinking: { type: 'disabled' }, ...payload }),
       signal: AbortSignal.timeout(30000)
     });
-    if (!response.ok) throw new HttpError(502, 'El proveedor de IA no respondió correctamente. Intenta más tarde.');
+    if (!response.ok) throw providerFailure(response.status);
     const raw = await response.json();
     const choice = raw?.choices?.[0];
     if (choice?.finish_reason === 'length') throw new HttpError(502, 'La respuesta de IA quedó incompleta. Vuelve a intentarlo con menos información.');
@@ -46,7 +63,8 @@ async function requestCompletion(payload) {
     return content.trim();
   } catch (error) {
     if (error instanceof HttpError) throw error;
-    throw new HttpError(502, 'No se pudo conectar con el servicio de IA. Intenta nuevamente.');
+    const timeout = ['TimeoutError', 'AbortError'].includes(error?.name);
+    throw new HttpError(502, timeout ? 'El servicio de IA tardó demasiado. Intenta nuevamente; tu cupo no se consumió.' : 'No se pudo conectar con el servicio de IA. Intenta nuevamente.', { code: timeout ? 'AI_PROVIDER_TIMEOUT' : 'AI_PROVIDER_CONNECTION' });
   }
 }
 

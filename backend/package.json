@@ -10,6 +10,7 @@
     "deploy:prepare": "node scripts/prepare-monsterasp.js",
     "db:create": "node scripts/create-db.js",
     "db:check": "node scripts/check-db.js",
+    "ai:check": "node scripts/check-ai.js",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
     "db:setup": "npm run db:create && npm run db:migrate && npm run db:seed",

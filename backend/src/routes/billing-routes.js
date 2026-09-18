@@ -15,8 +15,8 @@ billingRouter.get('/plan', asyncHandler(async (req, res) => {
 billingRouter.post('/simulate-checkout', asyncHandler(async (req, res) => {
   const { planCode } = z.object({ planCode: z.enum(['SILVER', 'GOLD']) }).parse(req.body);
   const plan = await activateSimulatedPlan(req.auth.userId, planCode);
-  await audit({ userId: req.auth.userId, action: 'SIMULATED_MONTH_STARTED', resourceType: 'SUBSCRIPTION', resourceId: req.auth.userId, metadata: { planCode, periodEnd: plan.subscription.currentPeriodEnd }, ip: req.ip });
-  res.json({ plan, simulated: true, message: 'Mes simulado activado: no se realizó ningún cobro.' });
+  await audit({ userId: req.auth.userId, action: 'SIMULATED_PLAN_SELECTED', resourceType: 'SUBSCRIPTION', resourceId: req.auth.userId, metadata: { planCode, periodEnd: plan.subscription.currentPeriodEnd }, ip: req.ip });
+  res.json({ plan, simulated: true, message: `Plan ${plan.name} activo. Al subir a un plan superior se habilitan sus beneficios de IA desde ese momento. No se realizó ningún cobro.` });
 }));
 
 billingRouter.post('/cancel', asyncHandler(async (req, res) => {

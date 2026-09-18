@@ -32,6 +32,7 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
   };
   for (const [table, columns] of Object.entries(schemas)) await conn.query(`CREATE TEMPORARY TABLE ${table} (${columns}) ENGINE=InnoDB`);
   await conn.query(await fs.readFile(new URL('../database/migrations/005_ai_review_versions_and_message_order.sql', import.meta.url), 'utf8'));
+  await conn.query(await fs.readFile(new URL('../database/migrations/008_paid_plan_benefit_grants.sql', import.meta.url), 'utf8'));
   const originalAi = { ...env.ai };
   env.ai.mockMode = true;
   t.after(() => Object.assign(env.ai, originalAi));
@@ -124,7 +125,9 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
     assert.deepEqual(latest.messages.map((m) => m.role), ['USER', 'ASSISTANT', 'USER', 'ASSISTANT']);
     assert.equal(latest.messages[0].content, 'Primer mensaje ficticio');
     assert.equal(latest.messages[2].content, 'Segundo mensaje ficticio');
-    await conn.execute("INSERT INTO ai_usage_ledger (id, user_id, profile_id, plan_code, usage_type, units) VALUES (?, ?, ?, 'FREE', 'CHAT', 8)", [randomUUID(), userId, secondProfile]);
+    // Match the application: usage is dated by the admitted request, not by
+    // a temporary-table default or the database server's separate clock.
+    await conn.execute("INSERT INTO ai_usage_ledger (id, user_id, profile_id, plan_code, usage_type, units, occurred_at) VALUES (?, ?, ?, 'FREE', 'CHAT', 8, ?)", [randomUUID(), userId, secondProfile, new Date()]);
     assert.equal((await request('chat', { conversationId, message: 'Mensaje sin cupo' })).status, 429);
     const [messages] = await conn.execute('SELECT COUNT(*) AS total FROM ai_messages');
     assert.equal(Number(messages[0].total), 4);
@@ -132,7 +135,7 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
 
   await t.test('SQL cuenta el lunes de Bolivia y excluye consumos anteriores al corte', async () => {
     const { start } = boliviaWeek();
-    await conn.execute("UPDATE ai_usage_ledger SET occurred_at=?", [new Date(start.getTime() - 1)]);
+    await conn.execute("UPDATE ai_usage_ledger SET occurred_at=?", [new Date(start.getTime() - 1000)]);
     const reset = await (await request('status', null, 'GET')).json();
     assert.equal(reset.chat.usedThisWeek, 0);
     assert.equal(reset.analysis.availableNow, true);
@@ -140,6 +143,58 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
     const current = await (await request('status', null, 'GET')).json();
     assert.equal(current.chat.usedThisWeek, 10);
     assert.equal(current.analysis.availableNow, false);
+  });
+
+  await t.test('subir de plan habilita beneficios; repetir, bajar, reanudar y volver a Gratis no regalan cupos', async () => {
+    const billing = async (route, body) => {
+      const response = await fetch(`${base.replace('/profiles', '')}/billing/${route}`, {
+        method: 'POST', headers, ...(body ? { body: JSON.stringify(body) } : {})
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      return (await response.json()).plan;
+    };
+    const silver = await billing('simulate-checkout', { planCode: 'SILVER' });
+    assert.ok(silver.subscription.benefitGrantId);
+    const status = () => request('status', null, 'GET').then(r => r.json());
+    let current = await status();
+    assert.equal(current.analysis.availableNow, true);
+    assert.equal(current.chat.usedThisWeek, 0);
+    assert.equal(current.chat.limit, 10);
+    assert.equal((await request('analyze', { eventIds: [ids[0]] })).status, 201);
+    assert.equal((await request('chat', { message: 'Mensaje de Plata' })).status, 201);
+    const repeated = await billing('simulate-checkout', { planCode: 'SILVER' });
+    assert.equal(repeated.subscription.benefitGrantId, silver.subscription.benefitGrantId);
+    assert.equal(repeated.subscription.currentPeriodEnd, silver.subscription.currentPeriodEnd);
+    await billing('cancel');
+    await billing('resume');
+    current = await status();
+    assert.equal(current.plan.subscription.benefitGrantId, silver.subscription.benefitGrantId);
+    assert.equal(current.analysis.availableNow, false);
+    assert.equal(current.chat.usedThisWeek, 1);
+    const otherStatus = await (await fetch(`${base}/${secondProfile}/ai/status`, { headers })).json();
+    assert.equal(otherStatus.analysis.availableNow, true);
+    assert.equal(otherStatus.chat.usedThisWeek, 0);
+    const gold = await billing('simulate-checkout', { planCode: 'GOLD' });
+    assert.notEqual(gold.subscription.benefitGrantId, silver.subscription.benefitGrantId);
+    current = await status();
+    assert.equal(current.analysis.availableNow, true);
+    assert.equal(current.chat.limit, null);
+    assert.equal((await request('analyze', { eventIds: [ids[0]] })).status, 201);
+    assert.equal((await request('chat', { message: 'Mensaje de Oro' })).status, 201);
+    // Equal timestamps must not mix the benefits granted by separate purchases.
+    await conn.execute('UPDATE ai_usage_ledger SET occurred_at=UTC_TIMESTAMP()');
+    const downgraded = await billing('simulate-checkout', { planCode: 'SILVER' });
+    assert.equal(downgraded.subscription.benefitGrantId, gold.subscription.benefitGrantId);
+    current = await status();
+    assert.equal(current.analysis.availableNow, false);
+    assert.equal(current.chat.usedThisWeek, 1);
+    await billing('cancel');
+    await conn.execute('UPDATE user_subscriptions SET current_period_end=? WHERE user_id=?', [new Date(Date.now() - 60000), userId]);
+    current = await status();
+    assert.equal(current.plan.code, 'FREE');
+    assert.equal(current.analysis.availableNow, false);
+    assert.equal(current.chat.usedThisWeek, 12);
+    assert.equal((await request('chat', { message: 'No recuperar cupo Gratis' })).status, 429);
   });
 
   await t.test('leer más de 40 veces no gasta el límite técnico y el consentimiento sigue accesible al agotarlo', async () => {

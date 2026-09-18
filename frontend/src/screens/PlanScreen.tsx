@@ -29,14 +29,18 @@ export function PlanScreen({ navigation }: any) {
     setBusy(planCode);
     try {
       const response = await apiRequest<{ message: string }>('/billing/simulate-checkout', { method: 'POST', body: JSON.stringify({ planCode }) });
-      Alert.alert('Mes simulado activado', response.message);
-      load();
+      Alert.alert('Plan actualizado', response.message);
+      await load();
     } catch (error: any) { Alert.alert('No se pudo activar', error.message); } finally { setBusy(null); }
   }
 
   function confirmActivation(plan: typeof plans[number]) {
     if (plan.code === 'FREE') return;
-    Alert.alert(`Activar ${plan.title}`, `Simularás un ciclo mensual de ${price(plan.monthlyPrice)}. No se pedirá tarjeta ni se realizará cobro alguno. El ciclo comienza hoy y podrás cancelarlo para que termine al finalizar el mes.`, [
+    const upgrade = plan.monthlyPrice > (status?.plan.monthlyPrice || 0);
+    const benefits = upgrade
+      ? 'Tendrás un análisis disponible de inmediato y el cupo completo de chat del nuevo plan. Los cupos semanales siguen renovándose los lunes a las 00:00 de Bolivia, sin acumularse.'
+      : 'Al bajar de plan se conserva el consumo de IA; el cambio no entrega un cupo nuevo.';
+    Alert.alert(`Activar ${plan.title}`, `Simularás un ciclo mensual de ${price(plan.monthlyPrice)}. No se pedirá tarjeta ni se realizará cobro alguno. El ciclo comienza hoy y podrás cancelarlo para que termine al finalizar el mes. ${benefits}`, [
       { text: 'Volver', style: 'cancel' },
       { text: 'Activar sin cobro', onPress: () => activate(plan.code as Exclude<PlanCode, 'FREE'>) }
     ]);
@@ -88,17 +92,18 @@ export function PlanScreen({ navigation }: any) {
 
     <SectionTitle>Planes mensuales simulados</SectionTitle>
     <Card style={{ backgroundColor: colors.aiSoft, borderColor: colors.ai }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Sin tarjeta ni pasarela de pago</Text><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
+    <Card><Text style={{ fontWeight: '900' }}>Beneficios al subir de plan</Text><Muted>Pasar de Gratis a Plata u Oro, o de Plata a Oro, habilita un análisis inmediato y el cupo completo de chat de ese plan para cada perfil. Seleccionar el mismo plan, bajar de plan o cancelar y reanudar no repone el consumo. Volver a Gratis conserva los usos de la semana.</Muted></Card>
     {plans.map((plan) => <Card key={plan.code} style={{ borderColor: activePlan?.code === plan.code ? colors.primary : colors.border, backgroundColor: activePlan?.code === plan.code ? colors.primarySoft : colors.surface }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><MaterialCommunityIcons name={plan.icon} size={26} color={plan.code === 'GOLD' ? colors.warning : colors.primary} /><View style={{ flex: 1 }}><Text style={{ fontSize: 19, fontWeight: '900', color: colors.text }}>{plan.title}</Text><Text style={{ color: colors.primary, fontWeight: '900', marginTop: 1 }}>{price(plan.monthlyPrice)}</Text></View>{activePlan?.code === plan.code ? <Text style={{ color: colors.primary, fontWeight: '900' }}>ACTUAL</Text> : null}</View>
       {plan.benefits.map((benefit) => <Muted key={benefit}>• {benefit}</Muted>)}
-      {plan.code === 'FREE' ? <SecondaryButton title={activePlan?.code === 'FREE' ? 'Plan actual' : 'Incluido sin costo'} onPress={() => {}} disabled /> : <PrimaryButton title={busy === plan.code ? 'Activando…' : activePlan?.code === plan.code ? 'Plan actual' : `Simular ${plan.title} por ${price(plan.monthlyPrice)}`} disabled={activePlan?.code === plan.code} loading={busy === plan.code} onPress={() => confirmActivation(plan)} />}
+      {plan.code === 'FREE' ? <SecondaryButton title={activePlan?.code === 'FREE' ? 'Plan actual' : 'Incluido sin costo'} onPress={() => {}} disabled /> : <PrimaryButton title={busy === plan.code ? 'Activando…' : activePlan?.code === plan.code ? 'Plan actual' : `Simular ${plan.title} por ${price(plan.monthlyPrice)}`} disabled={!activePlan || Boolean(busy) || activePlan.code === plan.code} loading={busy === plan.code} onPress={() => confirmActivation(plan)} />}
     </Card>)}
 
     <SectionTitle>Administrar suscripción</SectionTitle>
     {hasPaidPlan ? <Card style={{ borderColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warning : colors.border, backgroundColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warningSoft : colors.surface }}>
       <Text style={{ color: colors.text, fontWeight: '900' }}>{activePlan?.subscription.cancelAtPeriodEnd ? 'Tu cancelación está programada' : '¿Quieres cancelar este plan?'}</Text>
       <Muted>{activePlan?.subscription.cancelAtPeriodEnd ? `Mantendrás ${activePlan?.name} hasta el ${formatDate(activePlan?.subscription.currentPeriodEnd || null)}. Puedes reanudar antes de esa fecha.` : 'Cancelar no reduce tus beneficios inmediatamente: el cambio a Gratis ocurre al cerrar el período mensual simulado.'}</Muted>
-      {activePlan?.subscription.cancelAtPeriodEnd ? <PrimaryButton title={busy === 'resume' ? 'Reanudando…' : 'Reanudar renovación simulada'} onPress={resumePlan} loading={busy === 'resume'} /> : <PrimaryButton title={busy === 'cancel' ? 'Programando…' : 'Cancelar plan al finalizar el período'} onPress={confirmCancellation} loading={busy === 'cancel'} danger />}
+      {activePlan?.subscription.cancelAtPeriodEnd ? <PrimaryButton title={busy === 'resume' ? 'Reanudando…' : 'Reanudar renovación simulada'} onPress={resumePlan} loading={busy === 'resume'} disabled={Boolean(busy)} /> : <PrimaryButton title={busy === 'cancel' ? 'Programando…' : 'Cancelar plan al finalizar el período'} onPress={confirmCancellation} loading={busy === 'cancel'} disabled={Boolean(busy)} danger />}
     </Card> : <Card><Text style={{ color: colors.text, fontWeight: '900' }}>No tienes un plan de pago activo</Text><Muted>El plan Gratis no se cobra y no requiere cancelación.</Muted></Card>}
 
     <SecondaryButton title="Ir al centro de IA: uso y permisos" onPress={() => navigation.navigate('Main', { screen: 'IA', params: { screen: 'AICenter' } })} />

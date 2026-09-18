@@ -96,3 +96,20 @@ test('las respuestas clínicas se bloquean en análisis y chat', async (t) => {
   globalThis.fetch = async () => response('Debes tomar este medicamento.');
   await assert.rejects(answerOrganizerChat([], 'Hola'), { status: 422 });
 });
+
+test('saldo, autenticación y saturación se distinguen sin reenviar errores privados del proveedor', async (t) => {
+  configure(t, () => assert.fail('Configurar una respuesta para cada caso'));
+  for (const [status, code] of [[402, 'AI_PROVIDER_BALANCE'], [401, 'AI_PROVIDER_AUTH'], [429, 'AI_PROVIDER_BUSY']]) {
+    globalThis.fetch = async () => new Response('private-key and private-health-data', { status });
+    for (const action of [() => answerOrganizerChat([], 'Hola'), () => analyzeSelectedEvents([])]) {
+      await assert.rejects(action, (error) => {
+        assert.equal(error.status, 502);
+        assert.equal(error.details.code, code);
+        assert.equal(error.details.providerStatus, status);
+        assert.doesNotMatch(JSON.stringify(error), /private-key|private-health-data/);
+        if (status === 402) assert.match(error.message, /falta de saldo.*cupo no se consumió/);
+        return true;
+      });
+    }
+  }
+});

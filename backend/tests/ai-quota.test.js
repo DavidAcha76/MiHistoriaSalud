@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/config/db.js';
 import { env } from '../src/config/env.js';
-import { ensureAnalysisAllowed, ensureChatAllowed, withAiQuota, getPlanStatus } from '../src/services/plan-service.js';
+import { answerOrganizerChat } from '../src/services/ai-service.js';
+import { ensureAnalysisAllowed, ensureChatAllowed, withAiQuota, getPlanStatus, activateSimulatedPlan, scheduleSimulatedCancellation, resumeSimulatedPlan } from '../src/services/plan-service.js';
 
 const identity = { userId: 'user', profileId: 'profile' };
 const now = new Date('2026-09-18T12:00:00Z');
@@ -11,14 +12,28 @@ function database(t, { plan = 'SILVER', consent = true, ledger = [], canceled = 
   const oldAi = { ...env.ai };
   env.ai.mockMode = true;
   t.after(() => Object.assign(env.ai, oldAi));
-  const state = { plan, ledger, pending: [], locks: new Set(), releases: 0, rollbacks: 0, commits: 0, canceled };
+  const state = { plan, ledger, pending: [], locks: new Set(), releases: 0, rollbacks: 0, commits: 0, canceled,
+    periodStart: '2026-09-01T00:00:00Z', periodEnd: '2026-10-01T00:00:00Z', benefitGrantId: null, cancelAtPeriodEnd: false };
   async function execute(sql, params) {
-    if (sql.includes('FROM user_subscriptions')) return [[{ planCode: state.canceled ? 'FREE' : state.plan, status: state.canceled ? 'CANCELED' : 'SIMULATED_ACTIVE', currentPeriodEnd: '2026-10-01T00:00:00Z' }]];
+    if (sql.includes('FROM user_subscriptions')) return [[{ planCode: state.canceled ? 'FREE' : state.plan, status: state.canceled ? 'CANCELED' : 'SIMULATED_ACTIVE',
+      currentPeriodStart: state.periodStart, currentPeriodEnd: state.periodEnd, benefitGrantId: state.benefitGrantId, cancelAtPeriodEnd: state.cancelAtPeriodEnd }]];
+    if (sql.includes('INSERT INTO user_subscriptions')) {
+      [state.plan, state.periodStart, state.periodEnd, state.benefitGrantId] = params.slice(1);
+      state.canceled = false; state.cancelAtPeriodEnd = false;
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('UPDATE user_subscriptions')) {
+      if (sql.includes("SET plan_code='FREE'")) { state.plan = 'FREE'; state.canceled = true; state.cancelAtPeriodEnd = false; }
+      else if (sql.includes('SET current_period_start')) [state.periodStart, state.periodEnd] = params;
+      else state.cancelAtPeriodEnd = sql.includes('SET cancel_at_period_end=TRUE');
+      return [{ affectedRows: 1 }];
+    }
     if (sql.includes('FROM ai_consents')) return [consent ? [{ granted_at: now, revoked_at: null }] : []];
-    const scoped = state.ledger.filter((x) => x.userId === params[0] && (!sql.includes('profile_id=?') || x.profileId === params[1]));
+    const scoped = state.ledger.filter((x) => x.userId === params[0] && (!sql.includes('profile_id=?') || x.profileId === params[1])
+      && (!sql.includes('benefit_grant_id=?') || x.benefitGrantId === params[2]));
     if (sql.includes('SELECT occurred_at')) return [scoped.filter((x) => x.type === 'ANALYSIS').sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 1).map((x) => ({ occurred_at: x.date }))];
     if (sql.includes('SUM(units)')) {
-      const index = sql.includes('profile_id=?') ? 2 : 1;
+      const index = sql.includes('benefit_grant_id=?') ? 3 : sql.includes('profile_id=?') ? 2 : 1;
       return [[{ used: scoped.filter((x) => x.type === params[index] && new Date(x.date) >= params[index + 1] && new Date(x.date) < params[index + 2]).reduce((sum, x) => sum + (x.units || 1), 0) }]];
     }
     throw new Error(`Unexpected SQL: ${sql}`);
@@ -34,7 +49,7 @@ function database(t, { plan = 'SILVER', consent = true, ledger = [], canceled = 
           state.locks.add(params[0]); held = params[0]; return [[{ acquired: 1 }]];
         }
         if (sql.includes('RELEASE_LOCK')) { state.locks.delete(held); return [[{ released: 1 }]]; }
-        if (sql.includes('INSERT INTO ai_usage_ledger')) { pending.push({ userId: params[1], profileId: params[2], plan: params[3], type: params[4], date: params[6], metadata: JSON.parse(params[5]) }); return [{ affectedRows: 1 }]; }
+        if (sql.includes('INSERT INTO ai_usage_ledger')) { pending.push({ userId: params[1], profileId: params[2], plan: params[3], type: params[4], date: params[6], benefitGrantId: params[7], metadata: JSON.parse(params[5]) }); return [{ affectedRows: 1 }]; }
         return execute(sql, params);
       },
       async beginTransaction() {},
@@ -180,6 +195,20 @@ test('sin configuración del proveedor no se gasta el cupo', async (t) => {
   assert.equal(state.locks.size, 0);
 });
 
+test('el error de saldo de DeepSeek no consume el último mensaje Gratis', async (t) => {
+  const state = database(t, { plan: 'FREE', ledger: Array.from({ length: 9 }, () => entry('CHAT')) });
+  env.ai.mockMode = false;
+  env.ai.apiKey = 'test-key';
+  t.mock.method(globalThis, 'fetch', async () => new Response('private provider body', { status: 402 }));
+  await assert.rejects(withAiQuota({ ...identity, usageType: 'CHAT' }, async () => {
+    const value = await answerOrganizerChat([], 'Hola');
+    return { value, metadata: { provider: 'deepseek' } };
+  }), (error) => error.details.code === 'AI_PROVIDER_BALANCE');
+  assert.equal(state.ledger.length, 9);
+  assert.equal((await ensureChatAllowed(identity)).remaining, 1);
+  assert.equal(state.locks.size, 0);
+});
+
 test('un análisis rechazado puede guardarse en el historial sin cobrar cuota y conserva el error original', async (t) => {
   const state = database(t);
   const failure = new Error('Respuesta bloqueada');
@@ -195,4 +224,75 @@ test('las fechas SQL sin zona respetan el instante UTC de disponibilidad en desa
   const status = await getPlanStatus(identity);
   assert.equal(status.analysis.nextAnalysisAt, now.toISOString());
   assert.equal(status.analysis.availableNow, true);
+});
+
+test('Gratis agotado recibe análisis y diez mensajes al subir a Plata; Oro vuelve a habilitar análisis', async (t) => {
+  const state = database(t, { plan: 'FREE', ledger: [entry('ANALYSIS'), ...Array.from({ length: 10 }, () => entry('CHAT'))] });
+  const silver = await activateSimulatedPlan(identity.userId, 'SILVER');
+  const silverGrant = silver.subscription.benefitGrantId;
+  assert.ok(silverGrant);
+  assert.equal((await getPlanStatus(identity)).analysis.availableNow, true);
+  assert.equal((await ensureChatAllowed(identity)).remaining, 10);
+  await withAiQuota({ ...identity, usageType: 'ANALYSIS' }, completed);
+  for (let i = 0; i < 10; i++) await withAiQuota({ ...identity, usageType: 'CHAT' }, completed);
+  await assert.rejects(ensureAnalysisAllowed(identity), { status: 429 });
+  await assert.rejects(ensureChatAllowed(identity), { status: 429 });
+  assert.equal(state.ledger.at(-1).benefitGrantId, silverGrant);
+  const repeated = await activateSimulatedPlan(identity.userId, 'SILVER');
+  assert.equal(repeated.subscription.benefitGrantId, silverGrant);
+  assert.equal(repeated.subscription.currentPeriodEnd, silver.subscription.currentPeriodEnd);
+  await assert.rejects(ensureChatAllowed(identity), { status: 429 });
+  const gold = await activateSimulatedPlan(identity.userId, 'GOLD');
+  assert.notEqual(gold.subscription.benefitGrantId, silverGrant);
+  assert.equal((await getPlanStatus(identity)).analysis.availableNow, true);
+  assert.equal((await ensureChatAllowed(identity)).remaining, null);
+  await withAiQuota({ ...identity, usageType: 'ANALYSIS' }, completed);
+  await withAiQuota({ ...identity, usageType: 'CHAT' }, completed);
+  const downgraded = await activateSimulatedPlan(identity.userId, 'SILVER');
+  assert.equal(downgraded.subscription.benefitGrantId, gold.subscription.benefitGrantId);
+  assert.equal((await ensureChatAllowed(identity)).remaining, 9);
+  await assert.rejects(ensureAnalysisAllowed(identity), { status: 429 });
+});
+
+test('cancelar, reanudar y volver a Gratis conservan el uso, y el lunes no acumula beneficios de la subida', async (t) => {
+  const state = database(t, { plan: 'FREE', ledger: [entry('ANALYSIS'), ...Array.from({ length: 10 }, () => entry('CHAT'))] });
+  const silver = await activateSimulatedPlan(identity.userId, 'SILVER');
+  await withAiQuota({ ...identity, usageType: 'ANALYSIS' }, completed);
+  await withAiQuota({ ...identity, usageType: 'CHAT' }, completed);
+  await scheduleSimulatedCancellation(identity.userId);
+  await resumeSimulatedPlan(identity.userId);
+  assert.equal((await getPlanStatus(identity)).plan.subscription.benefitGrantId, silver.subscription.benefitGrantId);
+  assert.equal((await ensureChatAllowed(identity)).remaining, 9);
+  await assert.rejects(ensureAnalysisAllowed(identity), { status: 429 });
+  t.mock.timers.setTime(Date.parse('2026-09-21T04:00:00Z'));
+  assert.equal((await ensureChatAllowed(identity)).remaining, 10);
+  // Restore the request week to check the downgrade independently of renewal.
+  t.mock.timers.setTime(now.getTime());
+  await scheduleSimulatedCancellation(identity.userId);
+  state.periodEnd = new Date(now.getTime() - 1000);
+  const free = await getPlanStatus(identity);
+  assert.equal(free.plan.code, 'FREE');
+  assert.equal(free.chat.usedThisWeek, 11);
+  assert.equal(free.analysis.availableNow, false);
+  assert.equal(state.ledger.length, 13);
+});
+
+test('una subida no se cruza con una respuesta de IA pendiente ni consume el nuevo cupo', async (t) => {
+  const state = database(t, { plan: 'FREE' });
+  let finish;
+  let entered;
+  const ready = new Promise(resolve => { entered = resolve; });
+  const response = withAiQuota({ ...identity, usageType: 'CHAT' }, async () => {
+    entered();
+    await new Promise(resolve => { finish = resolve; });
+    return completed();
+  });
+  await ready;
+  await assert.rejects(activateSimulatedPlan(identity.userId, 'SILVER'), { status: 429 });
+  assert.equal(state.plan, 'FREE');
+  finish(); await response;
+  await activateSimulatedPlan(identity.userId, 'SILVER');
+  assert.equal((await ensureChatAllowed(identity)).remaining, 10);
+  assert.equal(state.ledger[0].benefitGrantId, null);
+  assert.equal(state.locks.size, 0);
 });

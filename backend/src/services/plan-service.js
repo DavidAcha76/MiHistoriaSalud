@@ -12,6 +12,7 @@ export const PLAN_DEFINITIONS = {
 };
 
 export const PLAN_CODES = Object.keys(PLAN_DEFINITIONS);
+const PLAN_RANK = { FREE: 0, SILVER: 1, GOLD: 2 };
 
 // mysql2 is configured for UTC and dateStrings; SQL timestamps omit the zone.
 function databaseDate(value) {
@@ -28,12 +29,13 @@ export function addCalendarMonth(value) {
   return date;
 }
 
-async function readSubscription(userId, executor = db) {
+async function readSubscription(userId, executor = db, currentRead = false) {
   const [rows] = await executor.execute(
     `SELECT plan_code AS planCode, status, provider, activated_at AS activatedAt, updated_at AS updatedAt,
             current_period_start AS currentPeriodStart, current_period_end AS currentPeriodEnd,
-            cancel_at_period_end AS cancelAtPeriodEnd, canceled_at AS canceledAt
-       FROM user_subscriptions WHERE user_id=? LIMIT 1`,
+            cancel_at_period_end AS cancelAtPeriodEnd, canceled_at AS canceledAt,
+            ai_benefit_grant_id AS benefitGrantId
+       FROM user_subscriptions WHERE user_id=? LIMIT 1${currentRead ? ' FOR UPDATE' : ''}`,
     [userId]
   );
   return rows[0] || null;
@@ -49,10 +51,13 @@ async function reconcileSubscription(userId, subscription, executor = db) {
     await executor.execute(
       `UPDATE user_subscriptions
        SET plan_code='FREE', status='CANCELED', canceled_at=NOW(), cancel_at_period_end=FALSE
-       WHERE user_id=?`,
-      [userId]
+       WHERE user_id=? AND status='SIMULATED_ACTIVE' AND plan_code=?
+         AND current_period_end <=> ? AND cancel_at_period_end=TRUE`,
+      [userId, subscription.planCode, subscription.currentPeriodEnd]
     );
-    return readSubscription(userId, executor);
+    // Another status reader may already have reconciled the expired row.
+    // Inside a transaction, use its current value rather than an older snapshot.
+    return readSubscription(userId, executor, executor !== db);
   }
 
   let periodStart = end || now;
@@ -64,10 +69,11 @@ async function reconcileSubscription(userId, subscription, executor = db) {
   await executor.execute(
     `UPDATE user_subscriptions
      SET current_period_start=?, current_period_end=?, canceled_at=NULL
-     WHERE user_id=?`,
-    [periodStart, periodEnd, userId]
+     WHERE user_id=? AND status='SIMULATED_ACTIVE' AND plan_code=?
+       AND current_period_end <=> ? AND cancel_at_period_end=FALSE`,
+    [periodStart, periodEnd, userId, subscription.planCode, subscription.currentPeriodEnd]
   );
-  return readSubscription(userId, executor);
+  return readSubscription(userId, executor, executor !== db);
 }
 
 function presentPlan(subscription) {
@@ -83,6 +89,7 @@ function presentPlan(subscription) {
       currentPeriodEnd: activePaidPlan ? subscription?.currentPeriodEnd || null : null,
       cancelAtPeriodEnd: activePaidPlan && Boolean(subscription?.cancelAtPeriodEnd),
       canceledAt: subscription?.canceledAt || null,
+      benefitGrantId: activePaidPlan ? subscription?.benefitGrantId || null : null,
       autoRenews: activePaidPlan && !subscription?.cancelAtPeriodEnd
     }
   };
@@ -96,34 +103,42 @@ export async function getPlan(userId, executor = db) {
 export async function activateSimulatedPlan(userId, planCode) {
   if (!PLAN_DEFINITIONS[planCode]) throw new HttpError(400, 'Plan no válido.');
   if (planCode === 'FREE') return scheduleSimulatedCancellation(userId);
-  const periodStart = new Date();
-  const periodEnd = addCalendarMonth(periodStart);
-  await db.execute(
-    `INSERT INTO user_subscriptions
-      (user_id, plan_code, status, provider, current_period_start, current_period_end, cancel_at_period_end, canceled_at)
-     VALUES (?, ?, 'SIMULATED_ACTIVE', 'simulation', ?, ?, FALSE, NULL)
-     ON DUPLICATE KEY UPDATE plan_code=VALUES(plan_code), status='SIMULATED_ACTIVE', provider='simulation',
-       activated_at=CURRENT_TIMESTAMP, current_period_start=VALUES(current_period_start), current_period_end=VALUES(current_period_end),
-       cancel_at_period_end=FALSE, canceled_at=NULL`,
-    [userId, planCode, periodStart, periodEnd]
-  );
-  return getPlan(userId);
+  return withAccountTransaction(userId, async (connection) => {
+    const current = await getPlan(userId, connection);
+    // Retries and selecting the current plan do not purchase another cycle.
+    if (current.code === planCode) return current;
+    const benefitGrantId = PLAN_RANK[planCode] > PLAN_RANK[current.code]
+      ? randomId() : current.subscription.benefitGrantId;
+    const periodStart = new Date();
+    const periodEnd = addCalendarMonth(periodStart);
+    await connection.execute(
+      `INSERT INTO user_subscriptions
+        (user_id, plan_code, status, provider, current_period_start, current_period_end, cancel_at_period_end, canceled_at, ai_benefit_grant_id)
+       VALUES (?, ?, 'SIMULATED_ACTIVE', 'simulation', ?, ?, FALSE, NULL, ?)
+       ON DUPLICATE KEY UPDATE plan_code=VALUES(plan_code), status='SIMULATED_ACTIVE', provider='simulation',
+         activated_at=CURRENT_TIMESTAMP, current_period_start=VALUES(current_period_start), current_period_end=VALUES(current_period_end),
+         cancel_at_period_end=FALSE, canceled_at=NULL, ai_benefit_grant_id=VALUES(ai_benefit_grant_id)`,
+      [userId, planCode, periodStart, periodEnd, benefitGrantId]
+    );
+    return getPlan(userId, connection);
+  });
 }
 
 export async function scheduleSimulatedCancellation(userId) {
-  const subscription = await reconcileSubscription(userId, await readSubscription(userId));
-  if (!subscription || subscription.status !== 'SIMULATED_ACTIVE' || !['SILVER', 'GOLD'].includes(subscription.planCode)) return getPlan(userId);
-  await db.execute('UPDATE user_subscriptions SET cancel_at_period_end=TRUE WHERE user_id=?', [userId]);
-  return getPlan(userId);
+  return withAccountTransaction(userId, async (connection) => {
+    const plan = await getPlan(userId, connection);
+    if (plan.code !== 'FREE') await connection.execute('UPDATE user_subscriptions SET cancel_at_period_end=TRUE WHERE user_id=?', [userId]);
+    return getPlan(userId, connection);
+  });
 }
 
 export async function resumeSimulatedPlan(userId) {
-  const subscription = await reconcileSubscription(userId, await readSubscription(userId));
-  if (!subscription || subscription.status !== 'SIMULATED_ACTIVE' || !['SILVER', 'GOLD'].includes(subscription.planCode)) {
-    throw new HttpError(409, 'No hay un plan simulado activo para reanudar.');
-  }
-  await db.execute('UPDATE user_subscriptions SET cancel_at_period_end=FALSE WHERE user_id=?', [userId]);
-  return getPlan(userId);
+  return withAccountTransaction(userId, async (connection) => {
+    const plan = await getPlan(userId, connection);
+    if (plan.code === 'FREE') throw new HttpError(409, 'No hay un plan simulado activo para reanudar.');
+    await connection.execute('UPDATE user_subscriptions SET cancel_at_period_end=FALSE WHERE user_id=?', [userId]);
+    return getPlan(userId, connection);
+  });
 }
 
 export async function getAiConsent(profileId, executor = db) {
@@ -155,20 +170,24 @@ export async function setAiConsent({ profileId, userId, granted }) {
   return getAiConsent(profileId);
 }
 
-export async function recordUsage({ userId, profileId, planCode, usageType, metadata = null, occurredAt = new Date() }, executor = db) {
+export async function recordUsage({ userId, profileId, planCode, usageType, metadata = null, occurredAt = new Date(), benefitGrantId = null }, executor = db) {
   await executor.execute(
-    `INSERT INTO ai_usage_ledger (id, user_id, profile_id, plan_code, usage_type, metadata_json, occurred_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [randomId(), userId, profileId, planCode, usageType, metadata ? JSON.stringify(metadata) : null, occurredAt]
+    `INSERT INTO ai_usage_ledger (id, user_id, profile_id, plan_code, usage_type, metadata_json, occurred_at, benefit_grant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [randomId(), userId, profileId, planCode, usageType, metadata ? JSON.stringify(metadata) : null, occurredAt, benefitGrantId]
   );
 }
 
-// FREE is shared by all profiles of the account. Paid plans retain their
-// existing per-profile rules; changing plan never deletes the ledger.
+// FREE counts the entire account ledger, including paid usage. Paid upgrades
+// grant fresh allowances per profile; downgrades keep the current grant.
 function usageScope(plan, userId, profileId) {
-  return plan.code === 'FREE'
-    ? { sql: 'user_id=?', params: [userId] }
-    : { sql: 'user_id=? AND profile_id=?', params: [userId, profileId] };
+  if (plan.code === 'FREE') return { sql: 'user_id=?', params: [userId] };
+  const scope = { sql: 'user_id=? AND profile_id=?', params: [userId, profileId] };
+  if (plan.subscription.benefitGrantId) {
+    scope.sql += ' AND benefit_grant_id=?';
+    scope.params.push(plan.subscription.benefitGrantId);
+  }
+  return scope;
 }
 
 async function weeklyUsage(plan, { userId, profileId }, usageType, week, executor) {
@@ -242,9 +261,9 @@ export async function getPlanStatus({ userId, profileId }) {
   };
 }
 
-// Serialize requests for the whole account, also across API processes/profiles.
-export async function withAiQuota({ userId, profileId, usageType }, work) {
-  if (!['ANALYSIS', 'CHAT'].includes(usageType)) throw new Error('Tipo de uso de IA no válido.');
+// Purchases and AI requests share a lock: an in-flight response must finish
+// before an upgrade assigns the next grant, including across API processes.
+async function withAccountTransaction(userId, work) {
   const connection = await db.getConnection();
   const lockName = `ai:${createHash('sha256').update(userId).digest('hex').slice(0, 60)}`;
   let locked = false;
@@ -253,21 +272,12 @@ export async function withAiQuota({ userId, profileId, usageType }, work) {
   try {
     const [rows] = await connection.execute('SELECT GET_LOCK(?, 0) AS acquired', [lockName]);
     locked = Number(rows[0]?.acquired) === 1;
-    if (!locked) throw new HttpError(429, 'Hay otra solicitud de IA en curso para esta cuenta. Espera a que termine.');
-    // TIMESTAMP(0) must not round 23:59:59.999 into the following week.
-    const occurredAt = new Date(Math.floor(Date.now() / 1000) * 1000);
-    const entitlement = usageType === 'ANALYSIS'
-      ? { plan: await ensureAnalysisAllowed({ userId, profileId }, connection, occurredAt) }
-      : await ensureChatAllowed({ userId, profileId }, connection, occurredAt);
-    if (!getAiAvailability().available) throw new HttpError(503, 'El servicio de IA aún no está disponible. Intenta más tarde.');
+    if (!locked) throw new HttpError(429, 'Hay otra solicitud de IA o cambio de plan en curso para esta cuenta. Espera a que termine.');
     await connection.beginTransaction();
     transaction = true;
-    const { value, metadata, failure } = await work({ connection, ...entitlement });
-    if (metadata) await recordUsage({ userId, profileId, planCode: entitlement.plan.code, usageType, metadata, occurredAt }, connection);
+    const value = await work(connection);
     await connection.commit();
     transaction = false;
-    // A rejected analysis is saved for the history without consuming quota.
-    if (failure) throw failure;
     return value;
   } catch (error) {
     if (transaction) {
@@ -284,4 +294,23 @@ export async function withAiQuota({ userId, profileId, usageType }, work) {
     if (reusable) connection.release();
     else connection.destroy();
   }
+}
+
+export async function withAiQuota({ userId, profileId, usageType }, work) {
+  if (!['ANALYSIS', 'CHAT'].includes(usageType)) throw new Error('Tipo de uso de IA no válido.');
+  const result = await withAccountTransaction(userId, async (connection) => {
+    // TIMESTAMP(0) must not round 23:59:59.999 into the following week.
+    const occurredAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+    const entitlement = usageType === 'ANALYSIS'
+      ? { plan: await ensureAnalysisAllowed({ userId, profileId }, connection, occurredAt) }
+      : await ensureChatAllowed({ userId, profileId }, connection, occurredAt);
+    if (!getAiAvailability().available) throw new HttpError(503, 'El servicio de IA aún no está disponible. Intenta más tarde.');
+    const result = await work({ connection, ...entitlement });
+    if (result.metadata) await recordUsage({ userId, profileId, planCode: entitlement.plan.code, usageType,
+      metadata: result.metadata, occurredAt, benefitGrantId: entitlement.plan.subscription.benefitGrantId }, connection);
+    return result;
+  });
+  // A rejected analysis is saved for the history without consuming quota.
+  if (result.failure) throw result.failure;
+  return result.value;
 }

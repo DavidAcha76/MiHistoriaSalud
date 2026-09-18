@@ -35,13 +35,37 @@ Los cupos semanales se reinician el lunes a las **00:00 de Bolivia (`America/La_
 
 Cambiar de perfil no multiplica el cupo Gratis; eliminar un dependiente conserva el consumo de la cuenta. Cambiar de plan no borra el uso anterior. Una solicitud que comienza antes del lunes y termina después pertenece a la semana en que fue admitida. Las cancelaciones y renovaciones mensuales continúan siendo simuladas, sin cobros.
 
+### Beneficios al subir de plan
+
+Gratis → Plata, Gratis → Oro y Plata → Oro habilitan un análisis inmediato y el cupo completo de chat del nuevo plan por perfil. Por ejemplo, después de gastar los 10 mensajes Gratis, activar Plata permite otros 10 mensajes durante esa semana. Al subir a Oro se habilita una nueva revisión y el chat sin cuota funcional. Después del primer análisis del nuevo plan se aplica su intervalo normal de 7 o 3 días. La activación no ejecuta IA ni cambia el consentimiento.
+
+Una subida reemplaza la asignación anterior: no suma los mensajes sin usar al nuevo cupo. El chat semanal continúa renovándose cada lunes a las 00:00 de Bolivia, sin acumulación. Volver a seleccionar el plan actual es idempotente: no cambia el período ni entrega más usos. Bajar de plan, cancelar, reanudar o renovar automáticamente el mes conserva el consumo. Al volver a Gratis se cuentan todos los usos de esa semana, incluidos los hechos con los planes de pago; cambiar de plan nunca devuelve consultas Gratis.
+
+La migración `008_paid_plan_benefit_grants.sql` añade un identificador de asignación a la suscripción y al registro de consumo. Cada subida obtiene uno nuevo; los consumos anteriores se conservan. Las suscripciones existentes mantienen sus límites hasta una nueva subida. Los cambios de plan y las solicitudes de IA usan el mismo bloqueo de cuenta y una transacción para evitar que una respuesta en curso se descuente de los beneficios recién adquiridos. La selección de planes continúa siendo un checkout simulado, sin cobros reales.
+
 El backend comprueba plan y consentimiento antes de llamar al proveedor. Usa un bloqueo de MySQL por cuenta para excluir solicitudes simultáneas incluso entre perfiles y procesos, y una transacción para guardar el resultado y el consumo juntos. Los errores del proveedor o del guardado no consumen el cupo. El límite técnico de 40 solicitudes por 15 minutos se aplica a generar análisis y mensajes; consultar resultados, ver el plan y cambiar el consentimiento no lo consumen.
 
-Ejecuta `npm.cmd run db:migrate` antes de usar el backend actualizado. La migración 005 añade las versiones revisadas y un contador para ordenar mensajes enviados en el mismo segundo; la 007 conserva el consumo de la cuenta al eliminar un perfil. Los resultados anteriores siguen disponibles.
+Ejecuta `npm.cmd run db:migrate` antes de usar el backend actualizado. La migración 005 añade las versiones revisadas y un contador para ordenar mensajes enviados en el mismo segundo; la 007 conserva el consumo de la cuenta al eliminar un perfil y la 008 separa los beneficios de cada subida. Los resultados anteriores siguen disponibles.
 
-Verificado el 18 de septiembre de 2026: la base configurada tiene aplicadas las migraciones 001 a 007. Pasaron 50 pruebas locales del backend, la integración con MySQL (7 resultados, incluido el grupo), 15 pruebas de frontend, TypeScript, la exportación web y los bundles Android/iOS. La prueba de navegador comprobó solicitudes manuales, selección médica, cupos, perfiles y pantallas de 320, 390 y 1440 px sin errores JavaScript ni desbordamiento horizontal.
+Verificado el 18 de septiembre de 2026: la base configurada tiene aplicadas las migraciones 001 a 008. Pasaron 59 pruebas locales del backend, la integración con MySQL (8 resultados, incluido el grupo), 15 pruebas de frontend, TypeScript y la exportación web. La integración comprobó subidas con cupos agotados, repetición del plan, bajadas, cancelación, reanudación y regreso a Gratis. La prueba de navegador comprobó solicitudes manuales, selección médica, cupos, perfiles y pantallas de 320, 390 y 1440 px sin errores JavaScript ni desbordamiento horizontal. Los bundles Android/iOS se comprobaron antes de este ajuste de suscripciones; no se repitió su exportación en esta revisión.
 
 La clave está configurada en los dos archivos locales de entorno, con `AI_MOCK_MODE=false`. La API oficial aceptó la autenticación (`GET /models`: HTTP 200) y confirmó `deepseek-flash`. La prueba real del chat, sin datos médicos, devolvió **HTTP 402: saldo insuficiente**; no se obtuvo una respuesta generada ni se ejecutó la prueba de análisis posterior. Es necesario recargar la cuenta de DeepSeek para completar esa verificación. La prueba no consultó registros ni consumió cupos de usuarios. No se ha publicado el código actualizado. [Códigos de error de DeepSeek](https://api-docs.deepseek.com/quick_start/error_codes/).
+
+## Diagnosticar errores en producción
+
+Desde `backend`, comprueba la configuración que se incluirá en la publicación:
+
+```powershell
+npm.cmd run ai:check -- --production
+```
+
+En el servidor, donde se utiliza `.env`, ejecuta `npm run ai:check` sin `--production`. La comprobación consulta autenticación, modelo y saldo; no genera texto, consulta historias médicas ni consume cuotas de usuarios. No imprime la clave ni el importe del saldo. Un resultado `ok: false` termina con código 1. Un resultado correcto verifica esos requisitos, pero no sustituye una solicitud manual de chat o análisis.
+
+El diagnóstico con la configuración local de producción confirmó `model.available: true` y `balance.available: false` (`AI_PROVIDER_BALANCE`). La comprobación HTTPS pública desde este entorno no pudo validar los certificados presentados por una inspección Fortinet; por ello no se confirmó la versión ni el `.env` del proceso publicado. Esto no demuestra un fallo del certificado original del hosting. No se cambió ni desactivó la validación TLS de la aplicación.
+
+El backend ahora distingue falta de saldo del servicio, rechazo de la clave, modelo/configuración, saturación y problemas de conexión. Los fallos del proveedor mantienen HTTP 502 y un código `details.code` específico: no se devuelven como HTTP 401 de la sesión del usuario. Los errores 5xx registran `requestId`, código y estado del proveedor sin cuerpos, claves ni datos médicos. El chat y el análisis muestran el mensaje correspondiente; un error no consume el cupo del plan.
+
+Para resolver `AI_PROVIDER_BALANCE`, recarga la cuenta de DeepSeek y repite el diagnóstico. Para que el hosting use la clave local, actualiza sus variables de IA en `.env` y reinicia el sitio. El despliegue normal conserva el `.env` remoto. `build-monsterasp.bat -ActualizarEntorno` permite reemplazarlo por el de producción del paquete si ese archivo contiene toda la configuración vigente del servidor. Publicar requiere el perfil `backend/monsterasp.publishsettings`; no estaba disponible durante este diagnóstico. El paquete preparado conserva la configuración privada para su publicación posterior.
 
 ## Solicitudes manuales y contexto seleccionado
 
@@ -51,7 +75,7 @@ Análisis y chat permiten buscar y seleccionar registros de cualquier página, h
 
 El chat conserva hasta 12 intervenciones previas del mismo perfil. Sin selección, solo usa la conversación; la pantalla lo informa. El prompt distingue información registrada de inferencias, exige referencias y fechas, trata notas y mensajes como datos no confiables, y limita las recomendaciones a organización y preguntas neutrales. No debe emitir diagnósticos nuevos, cambios de tratamiento, estudios ni triaje. Se registra la versión del prompt, versiones de eventos, identificadores de medicamentos y hash del contexto en el consumo. Los filtros son controles adicionales, no una validación clínica de todas las respuestas del modelo.
 
-Antes de arrancar esta versión aplica `007_preserve_account_ai_usage.sql` mediante `npm.cmd run db:migrate`. Conserva el consumo al borrar un perfil. Publica backend y frontend juntos y reinicia todos los procesos del backend para retirar cualquier programador antiguo que siga en memoria.
+Antes de arrancar esta versión aplica todas las migraciones hasta `008_paid_plan_benefit_grants.sql` mediante `npm.cmd run db:migrate`. En la base configurada ya están aplicadas. Publica backend y frontend juntos y reinicia todos los procesos del backend para usar los nuevos beneficios y retirar cualquier programador antiguo que siga en memoria.
 
 ## Verificar
 
