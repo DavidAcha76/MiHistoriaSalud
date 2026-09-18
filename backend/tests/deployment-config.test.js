@@ -55,3 +55,11 @@ test('puerto vacío conserva 4000 y desarrollo no confía en proxies', () => {
   assert.equal(config.port, 4000);
   assert.equal(config.trustProxy, 0);
 });
+
+test('la IA real es el valor predeterminado y solo la clave es necesaria para configurarla', () => {
+  const result = run({ AI_MOCK_MODE: '', DEEPSEEK_API_KEY: '  test-key  ', DEEPSEEK_MODEL: '', DEEPSEEK_BASE_URL: '' }, 'console.log(JSON.stringify(env.ai));');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), { apiKey: 'test-key', model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', mockMode: false });
+  const demo = run({ AI_MOCK_MODE: 'true' }, 'console.log(JSON.stringify({ mockMode: env.ai.mockMode }));');
+  assert.equal(JSON.parse(demo.stdout).mockMode, true);
+});

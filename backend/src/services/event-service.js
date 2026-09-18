@@ -129,12 +129,13 @@ export async function getEventById(eventId, profileId) {
   return event;
 }
 
-export async function getEventsWithDetails(profileId, eventIds) {
+export async function getEventsWithDetails(profileId, eventIds, executor = db) {
   if (!eventIds.length) return [];
   const unique = [...new Set(eventIds)].slice(0, 50);
   const placeholders = unique.map(() => '?').join(',');
-  const [rows] = await db.execute(
-    `SELECT * FROM health_events WHERE profile_id = ? AND id IN (${placeholders}) ORDER BY event_date DESC`,
+  const [rows] = await executor.execute(
+    `SELECT e.*, COALESCE((SELECT MAX(v.version_number) FROM health_event_versions v WHERE v.event_id=e.id), 0) AS record_version
+       FROM health_events e WHERE e.profile_id = ? AND e.id IN (${placeholders}) ORDER BY e.event_date DESC`,
     [profileId, ...unique]
   );
   const result = [];
@@ -142,7 +143,7 @@ export async function getEventsWithDetails(profileId, eventIds) {
     const config = detailMap[row.event_type];
     let details = null;
     if (config) {
-      const [detailRows] = await db.execute(`SELECT * FROM ${config.table} WHERE event_id = ? LIMIT 1`, [row.id]);
+      const [detailRows] = await executor.execute(`SELECT * FROM ${config.table} WHERE event_id = ? LIMIT 1`, [row.id]);
       details = detailRows[0] || null;
       if (details) delete details.event_id;
     }

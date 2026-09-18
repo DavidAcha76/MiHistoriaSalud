@@ -27,6 +27,18 @@ export async function withSslPreference(connect, mode = env.db.sslMode) {
   }
 }
 
+export async function initializeUtcSession(connection) {
+  // mysql2's timezone formats JS dates; MySQL also needs a session zone for
+  // NOW(), TIMESTAMP and comparisons against date literals.
+  try {
+    await connection.query("SET time_zone = '+00:00'");
+    return connection;
+  } catch (error) {
+    connection.destroy();
+    throw error;
+  }
+}
+
 export function createDatabaseConnection(overrides = {}) {
-  return withSslPreference((ssl) => mysql.createConnection({ ...mysqlOptions, ...overrides, ssl }));
+  return withSslPreference(async (ssl) => initializeUtcSession(await mysql.createConnection({ ...mysqlOptions, ...overrides, ssl })));
 }

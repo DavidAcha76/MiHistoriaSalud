@@ -73,7 +73,7 @@ Todo endpoint que opere sobre un perfil ejecuta una verificación por `profile_i
 
 ## Documentos
 
-Los documentos nunca se sirven desde una carpeta pública. El backend verifica sesión, perfil y documento antes de abrir el stream del archivo local o del objeto S3.
+Los documentos nunca se sirven desde una carpeta pública. Los archivos nuevos se guardan como una única copia privada en la base de datos, asociada a su perfil; el backend verifica sesión, perfil y documento antes de abrir su stream. Se conservan los adaptadores local y S3 únicamente para que los documentos antiguos sigan disponibles durante la migración.
 
 ## Frontend universal Android / iOS / Web
 

@@ -25,11 +25,6 @@ export function MoreScreen({ navigation }: any) {
     <Disclosure title="Cómo usar Clinia, paso a paso">
       <Card><Text style={{ fontFamily: fonts.bold, marginBottom: 8 }}>1. Comprueba el nombre de la persona</Text><Muted>Verás de quién es la información antes de consultar o añadir un registro.</Muted><Text style={{ fontFamily: fonts.bold, marginTop: 20, marginBottom: 8 }}>2. Elige lo que necesitas</Text><Muted>En Inicio puedes añadir un registro. En Medicinas ves tus horarios. En Historial encuentras lo que guardaste.</Muted><Text style={{ fontFamily: fonts.bold, marginTop: 20, marginBottom: 8 }}>3. Guarda y vuelve cuando quieras</Text><Muted>Los campos opcionales pueden quedar vacíos. Usa Volver para regresar a la pantalla anterior.</Muted></Card>
     </Disclosure>
-    <Disclosure title="Herramientas de inteligencia artificial">
-      <Muted>Ayudan a organizar tu información y preparar preguntas. No sustituyen a tu profesional de salud.</Muted>
-      <SecondaryButton title="Revisar mis registros con IA" onPress={() => navigation.navigate('IA')} />
-      <SecondaryButton title="Hablar con el asistente" onPress={() => navigation.navigate('Chat')} />
-    </Disclosure>
     <SectionTitle>Mi cuenta</SectionTitle>
     <Card><Text style={{ fontFamily: fonts.bold, fontSize: 20 }}>{user?.fullName}</Text><Muted>{user?.email}</Muted><View style={{ marginTop: 14 }}><SecondaryButton title="Ver mi plan y uso de IA" onPress={() => navigation.navigate('Plan')} /></View></Card>
     <SecondaryButton title="Cerrar mi sesión" onPress={() => setConfirmLogout(true)} />

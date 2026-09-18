@@ -1,62 +1,55 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { AppText as Text } from '../components/AppText';
+import React, { useRef, useState } from 'react';
 import { AppAlert as Alert } from '../utils/alerts';
-import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, Field, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
+import { AppTitle, Card, Field, FormError, LoadingState, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
 import { ProfileSelector } from '../components/ProfileSelector';
+import { AiUsageCard } from '../components/AiUsageCard';
+import { AiResultCard } from '../components/AiResultCard';
+import { AiRecordSelector } from '../components/AiRecordSelector';
 import { useProfiles } from '../context/ProfileContext';
-import type { AiResult, HealthEvent, PagedEvents, PlanStatus } from '../types/domain';
-import { colors } from '../theme/colors';
+import { useProfileResource } from '../hooks/useProfileResource';
+import type { AiResult, PlanStatus } from '../types/domain';
+import { aiBlockedReason } from '../utils/ai-access';
 
-type AnalysisHistory = { id: string; purpose: string; mode: 'MANUAL' | 'SCHEDULED'; status: string; createdAt: string; output?: AiResult };
+const fetchAnalysisData = (id: string) => apiRequest<PlanStatus>(`/profiles/${id}/ai/status`).then((status) => ({ status }));
 
-export function AIScreen({ navigation }: any) {
+export function AIScreen(props: any) {
   const { selectedProfile } = useProfiles();
-  const [events, setEvents] = useState<HealthEvent[]>([]);
+  return <AnalysisForProfile key={selectedProfile?.id || 'none'} {...props} />;
+}
+
+function AnalysisForProfile({ navigation }: any) {
+  const { profileId, data, error, loading: fetching, refresh } = useProfileResource(fetchAnalysisData);
   const [selected, setSelected] = useState<string[]>([]);
   const [purpose, setPurpose] = useState('Preparar una revisión informativa de los registros seleccionados');
   const [result, setResult] = useState<AiResult | null>(null);
-  const [status, setStatus] = useState<PlanStatus | null>(null);
-  const [history, setHistory] = useState<AnalysisHistory[]>([]);
   const [loading, setLoading] = useState(false);
-  const load = useCallback(() => {
-    if (!selectedProfile) return;
-    Promise.all([
-      apiRequest<PagedEvents>(`/profiles/${selectedProfile.id}/events?pageSize=50`),
-      apiRequest<PlanStatus>(`/profiles/${selectedProfile.id}/ai/status`),
-      apiRequest<AnalysisHistory[]>(`/profiles/${selectedProfile.id}/ai/analyses`)
-    ]).then(([eventData, planData, analyses]) => { setEvents(eventData.items); setStatus(planData); setHistory(analyses); }).catch((error: any) => Alert.alert('IA', error.message));
-  }, [selectedProfile?.id]);
-  useFocusEffect(useCallback(() => { load(); setSelected([]); setResult(null); }, [load]));
-  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-
-  async function consent() {
-    if (!selectedProfile) return;
-    try { await apiRequest(`/profiles/${selectedProfile.id}/ai/consent`, { method: 'PUT', body: JSON.stringify({ granted: true }) }); load(); } catch (error: any) { Alert.alert('IA', error.message); }
-  }
+  const inFlight = useRef(false);
+  const reason = aiBlockedReason(data?.status || null, 'analysis');
+  const canAnalyze = Boolean(profileId && data && !reason && !loading);
   async function analyze() {
-    if (!selectedProfile || !selected.length) return Alert.alert('Selecciona información', 'Elige al menos un registro.');
+    if (!profileId || !canAnalyze || !selected.length || inFlight.current) return;
+    inFlight.current = true;
     setLoading(true);
     try {
-      setResult(await apiRequest<AiResult>(`/profiles/${selectedProfile.id}/ai/analyze`, { method: 'POST', body: JSON.stringify({ eventIds: selected, purpose }) }));
-      load();
-    } catch (error: any) { Alert.alert('Análisis no disponible', error.message); } finally { setLoading(false); }
+      setResult(await apiRequest<AiResult>(`/profiles/${profileId}/ai/analyze`, { method: 'POST', body: JSON.stringify({ eventIds: selected, purpose: purpose.trim() }) }));
+      setSelected([]);
+    } catch (error: any) { Alert.alert('Revisión no disponible', error.message); }
+    finally { await refresh(); setLoading(false); inFlight.current = false; }
   }
-  const canAnalyze = Boolean(status?.consent.granted && status.analysis.availableNow);
-
   return <Screen>
-    <AppTitle title="Revisión con IA" subtitle="Organiza datos, repeticiones registradas y preguntas para consulta. No diagnostica ni recomienda estudios o tratamientos." />
+    <AppTitle title="Revisar mis registros" subtitle="Elige la información que quieres resumir y las preguntas que quieres preparar para tu consulta." />
     <ProfileSelector />
-    <Card style={{ backgroundColor: colors.aiSoft }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Plan {status?.plan.name || '…'}</Text><Muted>{status?.analysis.availableNow ? 'Hay una revisión disponible.' : `Próxima revisión: ${status?.analysis.nextAnalysisAt ? new Date(status.analysis.nextAnalysisAt).toLocaleDateString() : 'pendiente'}`}</Muted><Muted>{status?.consent.granted ? 'Uso de IA autorizado para este perfil.' : 'Aún no autorizaste el procesamiento de este perfil con IA.'}</Muted>{!status?.consent.granted ? <SecondaryButton title="Autorizar uso de IA" onPress={consent} /> : null}<SecondaryButton title="Plan y límites" onPress={() => navigation.navigate('Plan')} /><SecondaryButton title="Abrir asistente" onPress={() => navigation.navigate('Chat')} /></Card>
-    <Field label="Finalidad del análisis" value={purpose} onChangeText={setPurpose} editable={canAnalyze} />
+    {fetching ? <LoadingState /> : null}
+    {error ? <><FormError message={error} /><SecondaryButton title="Volver a cargar" onPress={refresh} /></> : null}
+    {data ? <AiUsageCard status={data.status} onRenew={refresh} /> : null}
+    {!profileId ? <Card><Muted>Selecciona un perfil para revisar sus registros.</Muted></Card> : null}
+    {data && reason ? <Card><Muted>{reason}</Muted><SecondaryButton title="Ir al centro de IA" onPress={() => navigation.navigate('AICenter')} /></Card> : null}
+    {result ? <><SectionTitle>Tu revisión</SectionTitle><AiResultCard result={result} /></> : null}
+    <Field label="Finalidad de la revisión" value={purpose} onChangeText={setPurpose} maxLength={300} hint="Entre 3 y 300 caracteres." editable={canAnalyze} />
     <SectionTitle>Selecciona registros</SectionTitle>
-    {events.map((event) => { const selectedNow = selected.includes(event.id); return <Pressable key={event.id} onPress={() => canAnalyze && toggle(event.id)}><Card style={{ borderColor: selectedNow ? colors.ai : colors.border, opacity: canAnalyze ? 1 : .6 }}><View style={{ flexDirection: 'row', gap: 10 }}><Text style={{ fontSize: 20 }}>{selectedNow ? '☑' : '☐'}</Text><View style={{ flex: 1 }}><Text style={{ fontWeight: '800', color: colors.text }}>{event.title}</Text><Muted>{event.eventDate || event.event_date} · {event.eventType || event.event_type}</Muted></View></View></Card></Pressable>; })}
-    <PrimaryButton title={`Analizar ${selected.length} registro(s)`} onPress={analyze} disabled={!canAnalyze || !selected.length} loading={loading} />
-    {result ? <><SectionTitle>Resultado</SectionTitle><Card style={{ borderColor: colors.ai }}><Text style={{ fontSize: 16, fontWeight: '800', color: colors.ai }}>IA · {result.provider} / {result.model}</Text><Text style={{ marginTop: 10, color: colors.text, lineHeight: 25 }}>{result.summary}</Text></Card><SectionTitle>Datos incompletos</SectionTitle><Card>{result.incompleteData.length ? result.incompleteData.map((item, index) => <Text key={index} style={{ color: colors.text, marginBottom: 7 }}>• {item}</Text>) : <Muted>No se señalaron datos incompletos.</Muted>}</Card><SectionTitle>Posibles contradicciones</SectionTitle><Card>{result.contradictions.length ? result.contradictions.map((item, index) => <Text key={index} style={{ color: colors.text, marginBottom: 7 }}>• {item}</Text>) : <Muted>No se señalaron contradicciones.</Muted>}</Card><SectionTitle>Preguntas informativas</SectionTitle><Card>{result.questions.map((item, index) => <Text key={index} style={{ color: colors.text, marginBottom: 7 }}>• {item}</Text>)}</Card><Card style={{ backgroundColor: colors.aiSoft }}><Text style={{ color: colors.ai, fontWeight: '800' }}>Importante</Text><Text style={{ color: colors.text, marginTop: 6, lineHeight: 25 }}>{result.disclaimer}</Text></Card></> : null}
-    <SectionTitle>Historial de revisiones</SectionTitle>
-    {history.map((analysis) => <Card key={analysis.id}><Text style={{ color: colors.text, fontWeight: '800' }}>{analysis.mode === 'SCHEDULED' ? 'Revisión automática' : 'Revisión manual'}</Text><Muted>{new Date(analysis.createdAt).toLocaleString()} · {analysis.status}</Muted>{analysis.output?.summary ? <Text style={{ marginTop: 6, color: colors.text }}>{analysis.output.summary}</Text> : null}</Card>)}
-    {!history.length ? <Card><Muted>Aún no hay revisiones guardadas.</Muted></Card> : null}
+    {profileId ? <AiRecordSelector profileId={profileId} selected={selected} onChange={setSelected} disabled={loading} /> : null}
+    <PrimaryButton title={`Revisar ${selected.length} registro(s)`} onPress={analyze} disabled={!canAnalyze || !selected.length || purpose.trim().length < 3} loading={loading} />
+    <SecondaryButton title="Ver mis revisiones guardadas" onPress={() => navigation.navigate('AIHistory')} />
   </Screen>;
 }

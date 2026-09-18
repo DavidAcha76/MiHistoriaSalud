@@ -37,7 +37,9 @@ export const env = {
     refreshDays: number(process.env.JWT_REFRESH_DAYS, 180)
   },
   storage: {
-    driver: process.env.STORAGE_DRIVER || 'local',
+    // Database storage is the default so every API instance connected to the
+    // same database can serve the one private copy of an uploaded document.
+    driver: (process.env.STORAGE_DRIVER || 'database').toLowerCase(),
     localDir: path.resolve(backendRoot, process.env.LOCAL_STORAGE_DIR || './storage/private'),
     maxFileMb: number(process.env.MAX_FILE_MB, 10),
     s3: {
@@ -50,10 +52,10 @@ export const env = {
     }
   },
   ai: {
-    apiKey: process.env.DEEPSEEK_API_KEY || '',
+    apiKey: (process.env.DEEPSEEK_API_KEY || '').trim(),
     baseUrl: (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
-    model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-    mockMode: bool(process.env.AI_MOCK_MODE, true)
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+    mockMode: bool(process.env.AI_MOCK_MODE, false)
   },
   seedDemo: bool(process.env.SEED_DEMO, process.env.NODE_ENV !== 'production'),
   demo: {
@@ -64,6 +66,10 @@ export const env = {
 
 if (!['disabled', 'preferred', 'required', 'verify_identity'].includes(env.db.sslMode)) {
   throw new Error('DB_SSL_MODE debe ser disabled, preferred, required o verify_identity.');
+}
+
+if (!['database', 'local', 's3'].includes(env.storage.driver)) {
+  throw new Error('STORAGE_DRIVER debe ser database, local o s3.');
 }
 
 export function validateProductionSecrets() {

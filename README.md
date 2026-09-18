@@ -35,6 +35,8 @@ Los ZIP web y backend se descomprimen en `/wwwroot` de sus respectivos sitios. N
 
 Las conexiones están en `backend/.env` y `backend/.env.production`. Verifica el acceso con `npm.cmd run db:check` y aplica las migraciones una sola vez antes de iniciar la API. Los archivos de entorno están excluidos del repositorio; no se utilizan archivos de ejemplo.
 
-Conexión verificada: usuario y base `db65746`. El hosting responde con MariaDB 10.11.15 (protocolo MySQL); las tres migraciones se aplicaron correctamente. El código conserva sintaxis compatible con MySQL 8.0.
+Conexión verificada: usuario y base `db65746`. El hosting responde con MariaDB 10.11.15 (protocolo MySQL); las migraciones 001 a 007 se aplicaron correctamente. El código conserva sintaxis compatible con MySQL 8.0.
 
 Instrucciones completas: [Pruebas y despliegue](docs/PRUEBAS-Y-DESPLIEGUE.md).
+
+La pestaña **IA** reúne revisiones, chat, historial, permisos y uso por plan. Solo se ejecuta por solicitud con información seleccionada. Gratis incluye 1 análisis y 10 mensajes por cuenta y semana, sin acumulación, con reinicio el lunes a las 00:00 de Bolivia. Para activar DeepSeek, completa `DEEPSEEK_API_KEY` en el entorno del backend y reinícialo. La configuración local ya usa `AI_MOCK_MODE=false`. Consulta [Configuración de IA y límites de suscripción](docs/IA.md), incluido cómo actualizar el `.env` del hosting.

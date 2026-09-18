@@ -36,13 +36,13 @@ documentRouter.post('/profiles/:profileId/documents', upload.single('file'), asy
     const [events] = await db.execute('SELECT id FROM health_events WHERE id=? AND profile_id=? LIMIT 1', [eventId, req.params.profileId]);
     if (!events.length) throw new HttpError(400, 'El evento asociado no pertenece al perfil.');
   }
-  const stored = await savePrivateFile(req.file, req.params.profileId);
   const id = randomId();
+  const stored = await savePrivateFile(req.file, req.params.profileId);
   try {
     await db.execute(
-      `INSERT INTO clinical_documents (id, profile_id, event_id, original_name, stored_name, mime_type, size_bytes, storage_driver, storage_key, uploaded_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, req.params.profileId, eventId, req.file.originalname, stored.key.split('/').pop(), req.file.mimetype, req.file.size, stored.driver, stored.key, req.auth.userId]
+      `INSERT INTO clinical_documents (id, profile_id, event_id, original_name, stored_name, mime_type, size_bytes, storage_driver, storage_key, content_blob, uploaded_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, req.params.profileId, eventId, req.file.originalname, stored.key.split('/').pop(), req.file.mimetype, req.file.size, stored.driver, stored.key, stored.content || null, req.auth.userId]
     );
   } catch (e) {
     await deletePrivateFile(stored.driver, stored.key);
@@ -60,7 +60,7 @@ documentRouter.get('/profiles/:profileId/documents/:documentId/download', asyncH
   );
   if (!rows.length) throw new HttpError(404, 'Documento no encontrado.');
   const doc = rows[0];
-  const { stream } = await openPrivateFile(doc.storage_driver, doc.storage_key);
+  const { stream } = await openPrivateFile(doc.storage_driver, doc.storage_key, doc.content_blob);
   res.setHeader('Content-Type', doc.mime_type);
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(doc.original_name)}`);
   res.setHeader('Cache-Control', 'private, no-store');

@@ -69,7 +69,8 @@ export type SubscriptionPlan = {
   code: PlanCode;
   name: string;
   monthlyPrice: number;
-  analysisEveryDays: number;
+  analysisEveryDays: number | null;
+  weeklyAnalysisLimit?: number;
   weeklyChatLimit: number | null;
   simulated: boolean;
   subscription: {
@@ -83,8 +84,12 @@ export type SubscriptionPlan = {
   };
 };
 export type PlanStatus = {
+  quotaScope?: 'ACCOUNT' | 'PROFILE';
+  timeZone?: string;
   plan: SubscriptionPlan;
+  service?: { available: boolean; mode: 'demo' | 'live' };
   consent: { granted: boolean; grantedAt: string | null };
   chat: { usedThisWeek: number; limit: number | null; resetsAt: string };
-  analysis: { everyDays: number; lastAnalysisAt: string | null; nextAnalysisAt: string | null; availableNow: boolean };
+  analysis: { everyDays: number | null; limit?: number | null; usedThisWeek?: number | null; resetsAt?: string | null; lastAnalysisAt: string | null; nextAnalysisAt: string | null; availableNow: boolean };
 };
+export type AnalysisHistory = { id: string; purpose: string; mode: 'MANUAL' | 'SCHEDULED'; status: 'PROCESSING' | 'COMPLETED' | 'REJECTED'; createdAt: string; output?: AiResult | null };

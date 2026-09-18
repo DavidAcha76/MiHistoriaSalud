@@ -1,17 +1,17 @@
 import mysql from 'mysql2/promise';
 import { env } from './env.js';
-import { mysqlOptions, withSslPreference } from './mysql-connection.js';
+import { initializeUtcSession, mysqlOptions, withSslPreference } from './mysql-connection.js';
 
 const pools = new Map();
 
 async function getConnection() {
-  return withSslPreference((ssl) => {
+  return withSslPreference(async (ssl) => {
     const key = ssl ? 'tls' : 'plain';
     if (!pools.has(key)) pools.set(key, mysql.createPool({
       ...mysqlOptions, ssl, waitForConnections: true,
       connectionLimit: env.db.connectionLimit, namedPlaceholders: false
     }));
-    return pools.get(key).getConnection();
+    return initializeUtcSession(await pools.get(key).getConnection());
   });
 }
 

@@ -11,6 +11,8 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { TimelineScreen } from '../screens/TimelineScreen';
 import { AIScreen } from '../screens/AIScreen';
+import { AICenterScreen } from '../screens/AICenterScreen';
+import { AIHistoryScreen } from '../screens/AIHistoryScreen';
 import { MoreScreen } from '../screens/MoreScreen';
 import { DocumentsScreen } from '../screens/DocumentsScreen';
 import { ProfilesScreen } from '../screens/ProfilesScreen';
@@ -29,7 +31,17 @@ import { AppTabBar } from '../components/AppTabBar';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+const AIStack = createNativeStackNavigator();
 const navigationTheme = { ...DarkTheme, colors: { ...DarkTheme.colors, primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border, notification: colors.danger } };
+
+function AINavigator() {
+  return <AIStack.Navigator screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold }, contentStyle: { backgroundColor: colors.background }, headerBackButtonDisplayMode: 'minimal' }}>
+    <AIStack.Screen name="AICenter" component={AICenterScreen} options={{ headerShown: false }} />
+    <AIStack.Screen name="AIAnalysis" component={AIScreen} options={{ title: 'Revisar registros' }} />
+    <AIStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Asistente de IA' }} />
+    <AIStack.Screen name="AIHistory" component={AIHistoryScreen} options={{ title: 'Mis revisiones' }} />
+  </AIStack.Navigator>;
+}
 
 function MainTabs() {
   const { width, fontScale } = useWindowDimensions();
@@ -41,6 +53,7 @@ function MainTabs() {
     <Tabs.Screen name="Inicio" component={HomeScreen} />
     <Tabs.Screen name="Medicinas" component={MedicationScheduleScreen} />
     <Tabs.Screen name="Historial" component={TimelineScreen} />
+    <Tabs.Screen name="IA" component={AINavigator} />
     <Tabs.Screen name="Más" component={MoreScreen} />
   </Tabs.Navigator>;
 }
@@ -51,7 +64,6 @@ export function AppNavigator() {
   return <NavigationContainer theme={navigationTheme}><Stack.Navigator screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
     {user ? <>
       <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-      <Stack.Screen name="IA" component={AIScreen} options={{ title: 'Revisión con IA' }} />
       <Stack.Screen name="EventForm" component={EventFormScreen} options={{ title: 'Registrar evento' }} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: 'Detalle' }} />
       <Stack.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documentos clínicos' }} />
@@ -61,7 +73,6 @@ export function AppNavigator() {
       <Stack.Screen name="Summary" component={SummaryScreen} options={{ title: 'Resumen para consulta' }} />
       <Stack.Screen name="Share" component={ShareScreen} options={{ title: 'Compartir para consulta' }} />
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: 'Plan y uso de IA' }} />
-      <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Asistente de organización' }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Avisos' }} />
       <Stack.Screen name="MedicationSchedule" component={MedicationScheduleScreen} options={{ title: 'Medicamentos y tomas' }} />
       <Stack.Screen name="MedicationForm" component={MedicationFormScreen} options={{ title: 'Registrar medicamento' }} />

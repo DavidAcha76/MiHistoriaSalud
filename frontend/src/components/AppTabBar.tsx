@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BrandLogo } from './BrandLogo';
 import { colors, fonts } from '../theme/colors';
 
-const icons: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { Inicio: 'home-outline', Medicinas: 'pill', Historial: 'clipboard-text-outline', Más: 'dots-horizontal' };
+const icons: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { Inicio: 'home-outline', Medicinas: 'pill', Historial: 'clipboard-text-outline', IA: 'creation', Más: 'dots-horizontal' };
 
 export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const { width, fontScale } = useWindowDimensions();
@@ -16,12 +16,12 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
     {wide ? <View style={styles.brand}><BrandLogo withName size={42} /></View> : null}
     {state.routes.map((route, index) => {
       const selected = state.index === index;
-      return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={route.name === 'Más' ? 'Más opciones' : route.name} accessibilityState={{ selected }} onPress={() => {
+      return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={route.name === 'Más' ? 'Más opciones' : route.name === 'IA' ? 'IA, inteligencia artificial' : route.name} accessibilityState={{ selected }} aria-selected={selected} onPress={() => {
         const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
         if (!selected && !event.defaultPrevented) navigation.navigate(route.name);
       }} onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })} style={({ pressed }) => [styles.item, wide && styles.sidebarItem, selected && styles.selected, pressed && { opacity: .8 }]}>
         <MaterialCommunityIcons name={icons[route.name]} size={27} color={selected ? colors.primary : colors.muted} />
-        <Text style={[styles.label, wide && styles.sidebarLabel, { color: selected ? colors.primary : colors.muted }]}>{route.name}</Text>
+        <Text style={[styles.label, width < 430 && { fontSize: 12, lineHeight: 18 }, wide && styles.sidebarLabel, { color: selected ? colors.primary : colors.muted }]}>{width < 360 && route.name === 'Medicinas' ? 'Tomas' : route.name}</Text>
       </Pressable>;
     })}
     {wide ? <View style={styles.footer}><MaterialCommunityIcons name="heart-pulse" size={24} color={colors.primary} /><Text style={styles.footerText}>Tu salud, paso a paso.</Text></View> : null}

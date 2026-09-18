@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { env } from '../config/env.js';
 import { randomId } from '../utils/security.js';
@@ -32,6 +33,12 @@ const s3 = env.storage.driver === 's3'
 export async function savePrivateFile(file, profileId) {
   validateFile(file);
   const key = `${profileId}/${randomId()}${safeExt(file.originalname)}`;
+  if (env.storage.driver === 'database') {
+    // The caller persists this buffer in clinical_documents in the same
+    // database that identifies the account and profile. There is no second
+    // filesystem or object-storage copy for newly uploaded documents.
+    return { driver: 'database', key, content: file.buffer };
+  }
   if (env.storage.driver === 's3') {
     if (!env.storage.s3.bucket) throw new HttpError(500, 'S3_BUCKET no está configurado.');
     await s3.send(new PutObjectCommand({
@@ -50,7 +57,11 @@ export async function savePrivateFile(file, profileId) {
   return { driver: 'local', key };
 }
 
-export async function openPrivateFile(driver, key) {
+export async function openPrivateFile(driver, key, content = null) {
+  if (driver === 'database') {
+    if (!content) throw new HttpError(404, 'Archivo físico no encontrado.');
+    return { stream: Readable.from(Buffer.from(content)) };
+  }
   if (driver === 's3') {
     const result = await s3.send(new GetObjectCommand({ Bucket: env.storage.s3.bucket, Key: key }));
     return { stream: result.Body };
@@ -61,6 +72,7 @@ export async function openPrivateFile(driver, key) {
 }
 
 export async function deletePrivateFile(driver, key) {
+  if (driver === 'database') return;
   if (driver === 's3') {
     await s3.send(new DeleteObjectCommand({ Bucket: env.storage.s3.bucket, Key: key }));
     return;

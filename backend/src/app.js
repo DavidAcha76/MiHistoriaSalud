@@ -32,18 +32,21 @@ app.use(cors({ origin: env.corsOrigin === '*' ? true : env.corsOrigin.split(',')
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
-const limited = (kind, limit) => rateLimit({
+const limited = (kind, limit, options = {}) => rateLimit({
   windowMs: 15 * 60 * 1000,
   limit,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+  ...options,
   handler: (req, res) => {
     log('warn', 'rate_limit_reached', { requestId: req.requestId, path: req.path, kind });
     res.status(429).json({ error: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
   }
 });
 const authLimiter = limited('auth', 80);
-const aiLimiter = limited('ai', 40);
+const aiLimiter = limited('ai', 40, {
+  skip: (req) => req.method !== 'POST' || !/^\/profiles\/[^/]+\/ai\/(analyze|chat)\/?$/.test(req.path)
+});
 app.use('/api/auth', authLimiter, authRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'Clinicsoft API', time: new Date().toISOString() }));

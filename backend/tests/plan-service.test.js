@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { addCalendarMonth, PLAN_DEFINITIONS } from '../src/services/plan-service.js';
 
 test('los planes aplican los intervalos y cuotas definidos', () => {
-  assert.equal(PLAN_DEFINITIONS.FREE.analysisEveryDays, 14);
-  assert.equal(PLAN_DEFINITIONS.FREE.weeklyChatLimit, 0);
+  assert.equal(PLAN_DEFINITIONS.FREE.analysisEveryDays, null);
+  assert.equal(PLAN_DEFINITIONS.FREE.weeklyAnalysisLimit, 1);
+  assert.equal(PLAN_DEFINITIONS.FREE.weeklyChatLimit, 10);
   assert.equal(PLAN_DEFINITIONS.SILVER.analysisEveryDays, 7);
   assert.equal(PLAN_DEFINITIONS.SILVER.weeklyChatLimit, 10);
   assert.equal(PLAN_DEFINITIONS.GOLD.analysisEveryDays, 3);

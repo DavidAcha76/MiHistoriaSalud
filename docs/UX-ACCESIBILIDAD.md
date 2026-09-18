@@ -1,11 +1,12 @@
 # Interfaz y accesibilidad — Clinia
 
-Actualización: 16 de septiembre de 2026.
+Actualización: 18 de septiembre de 2026.
 
 ## Uso cotidiano
 
-- Inicio ofrece registrar información, medicamentos, historial, documentos y resumen para consulta. Los planes y la IA quedan en Más.
-- Cuatro destinos permanentes: Inicio, Medicinas, Historial y Más. Menú lateral desde 1100 px; barra inferior en pantallas menores.
+- Inicio ofrece registrar información, medicamentos, historial, documentos y resumen para consulta. IA reúne revisión manual, asistente, historial de revisiones, consentimiento y acceso al plan.
+- Cinco destinos permanentes: Inicio, Medicinas, Historial, IA y Más. Menú lateral desde 1100 px; barra inferior en pantallas menores. La barra permanece visible dentro de las herramientas de IA.
+- Gratis muestra 1 análisis y 10 mensajes semanales por cuenta, compartidos entre perfiles, con reinicio el lunes a las 00:00 de Bolivia y sin acumulación. Plata y Oro conservan sus reglas por perfil. La IA solo se ejecuta por solicitud; las pantallas actualizan la disponibilidad al renovar el cupo. Los resultados guardados no consumen cuota. Análisis y chat permiten elegir registros con búsqueda y paginación; el chat permite incluir horarios de medicamentos y explica qué información se enviará.
 - El nombre de la persona está visible antes de consultar o guardar datos. Los formularios de registros, medicamentos y documentos mantienen la persona seleccionada.
 - El registro de una molestia requiere nombre y fecha, sin repetir el nombre en otro campo. Los detalles adicionales son opcionales y desplegables.
 - El historial incluye búsqueda, filtros desplegables, selección visible del tipo y paginación.
@@ -33,13 +34,14 @@ npm.cmd run build:web
 npm.cmd run check:native
 ```
 
-Resultado: tipos correctos, 11 pruebas aprobadas y exportaciones web, Android e iOS completadas.
+Resultado: tipos correctos, 15 pruebas aprobadas y exportaciones web, Android e iOS completadas.
 
 Revisión de navegador reproducible con Edge instalado:
 
 ```powershell
 npm.cmd install --prefix .ui-qa --no-save --package-lock=false --ignore-scripts playwright
 node scripts/verify-ui.cjs
+node scripts/verify-ai.cjs
 ```
 
 El script sirve la exportación local e intercepta todas las peticiones a la API con datos ficticios; no utiliza cuentas ni registros reales. Las peticiones externas sin fixture se bloquean.
@@ -47,5 +49,7 @@ El script sirve la exportación local e intercepta todas las peticiones a la API
 Comprueba acceso, registro, navegación, documentos, resumen, formularios, confirmación/cancelación de tomas, cambio de persona y errores en 320, 390, 768 y 1440 px. También comprueba foco visible, móvil horizontal a 844 × 390, el espacio equivalente a escritorio con zoom al 200 % (720 × 450) y texto duplicado por CSS en Inicio. Las comprobaciones no encontraron desbordamientos horizontales en esos escenarios.
 
 Capturas y resultados locales: `frontend/.ui-qa/results/` (excluidos de Git).
+
+La comprobación específica de IA pasó en 320, 390 y 1440 px: selección explícita de registros y medicamentos, una sola solicitud por acción, cupo Gratis compartido entre perfiles, limpieza de selección al cambiar de persona, historial, consentimiento y proveedor sin configurar. No encontró errores JavaScript ni desbordamiento horizontal.
 
 La prueba de texto duplicado es una simulación, no una prueba de Dynamic Type. Quedan por verificar en dispositivos físicos el teclado, las áreas seguras, los selectores nativos, VoiceOver/TalkBack y el uso con personas mayores. Las exportaciones móviles no equivalen a una prueba de ejecución en Android/iOS.

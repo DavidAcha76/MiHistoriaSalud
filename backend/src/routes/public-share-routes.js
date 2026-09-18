@@ -32,7 +32,7 @@ publicShareRouter.get('/share/:token/documents/:documentId/download', asyncHandl
   const token = z.string().min(30).max(200).parse(req.params.token);
   const documentId = z.string().uuid().parse(req.params.documentId);
   const { document } = await resolveSharedDocument(token, documentId);
-  const { stream } = await openPrivateFile(document.storage_driver, document.storage_key);
+  const { stream } = await openPrivateFile(document.storage_driver, document.storage_key, document.content_blob);
   res.setHeader('Content-Type', document.mime_type);
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(document.original_name)}`);
   res.setHeader('Cache-Control', 'private, no-store');

@@ -1,18 +1,17 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import { AppAlert as Alert } from '../utils/alerts';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
+import { AppTitle, Card, FormError, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
 import { ProfileSelector } from '../components/ProfileSelector';
-import { useProfiles } from '../context/ProfileContext';
+import { useProfileResource } from '../hooks/useProfileResource';
 import type { PlanCode, PlanStatus } from '../types/domain';
 import { colors } from '../theme/colors';
 
 const plans: Array<{ code: PlanCode; title: string; monthlyPrice: number; icon: keyof typeof MaterialCommunityIcons.glyphMap; benefits: string[] }> = [
-  { code: 'FREE', title: 'Gratis', monthlyPrice: 0, icon: 'leaf-circle-outline', benefits: ['Una revisión informativa cada 14 días', 'Sin chatbot'] },
+  { code: 'FREE', title: 'Gratis', monthlyPrice: 0, icon: 'leaf-circle-outline', benefits: ['1 análisis informativo y 10 mensajes por semana por cuenta', 'Renovación los lunes a las 00:00 de Bolivia; no acumulables'] },
   { code: 'SILVER', title: 'Plata', monthlyPrice: 19, icon: 'medal-outline', benefits: ['Una revisión informativa cada 7 días', '10 mensajes con el asistente por semana'] },
   { code: 'GOLD', title: 'Oro', monthlyPrice: 39, icon: 'crown-outline', benefits: ['Una revisión informativa cada 3 días', 'Chat sin cuota funcional, con uso razonable y seguro'] }
 ];
@@ -20,15 +19,11 @@ const plans: Array<{ code: PlanCode; title: string; monthlyPrice: number; icon: 
 const formatDate = (value: string | null) => value ? new Date(value).toLocaleDateString('es-BO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const price = (amount: number) => amount ? `Bs ${amount}/mes` : 'Sin costo';
 
+const fetchStatus = (id: string) => apiRequest<PlanStatus>(`/profiles/${id}/ai/status`);
+
 export function PlanScreen({ navigation }: any) {
-  const { selectedProfile } = useProfiles();
-  const [status, setStatus] = useState<PlanStatus | null>(null);
+  const { profileId, data: status, error, refresh: load } = useProfileResource(fetchStatus);
   const [busy, setBusy] = useState<string | null>(null);
-  const load = useCallback(() => {
-    if (!selectedProfile) return;
-    apiRequest<PlanStatus>(`/profiles/${selectedProfile.id}/ai/status`).then(setStatus).catch((error: any) => Alert.alert('Plan', error.message));
-  }, [selectedProfile?.id]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function activate(planCode: Exclude<PlanCode, 'FREE'>) {
     setBusy(planCode);
@@ -45,14 +40,6 @@ export function PlanScreen({ navigation }: any) {
       { text: 'Volver', style: 'cancel' },
       { text: 'Activar sin cobro', onPress: () => activate(plan.code as Exclude<PlanCode, 'FREE'>) }
     ]);
-  }
-
-  async function setConsent(granted: boolean) {
-    if (!selectedProfile) return;
-    try {
-      await apiRequest(`/profiles/${selectedProfile.id}/ai/consent`, { method: 'PUT', body: JSON.stringify({ granted }) });
-      load();
-    } catch (error: any) { Alert.alert('Consentimiento', error.message); }
   }
 
   function confirmCancellation() {
@@ -87,6 +74,7 @@ export function PlanScreen({ navigation }: any) {
   return <Screen>
     <AppTitle title="Plan de Clinia" subtitle="Elige un plan visible y simple. Los montos, ciclos y renovaciones que ves aquí son una simulación mensual." />
     <ProfileSelector />
+    {error ? <><FormError message={error} /><SecondaryButton title="Volver a cargar el plan" onPress={load} /></> : null}
     {activePlan ? <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primary }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name={activePlan.code === 'GOLD' ? 'crown-outline' : activePlan.code === 'SILVER' ? 'medal-outline' : 'leaf-circle-outline'} size={26} color={colors.primary} /></View>
@@ -96,7 +84,7 @@ export function PlanScreen({ navigation }: any) {
         <Muted>Período actual: {formatDate(activePlan.subscription.currentPeriodStart)} — {formatDate(activePlan.subscription.currentPeriodEnd)}</Muted>
         <Muted>{activePlan.subscription.cancelAtPeriodEnd ? `Cancelación programada para el ${formatDate(activePlan.subscription.currentPeriodEnd)}.` : `Renovación mensual simulada el ${formatDate(activePlan.subscription.currentPeriodEnd)}.`}</Muted>
       </> : <Muted>Estás usando el plan gratuito. Puedes activar un mes simulado de Plata u Oro cuando quieras.</Muted>}
-    </Card> : <Card><Muted>Cargando el plan…</Muted></Card>}
+    </Card> : !error ? <Card><Muted>{profileId ? 'Cargando el plan…' : 'Selecciona un perfil para consultar tu plan.'}</Muted></Card> : null}
 
     <SectionTitle>Planes mensuales simulados</SectionTitle>
     <Card style={{ backgroundColor: colors.aiSoft, borderColor: colors.ai }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Sin tarjeta ni pasarela de pago</Text><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
@@ -113,8 +101,6 @@ export function PlanScreen({ navigation }: any) {
       {activePlan?.subscription.cancelAtPeriodEnd ? <PrimaryButton title={busy === 'resume' ? 'Reanudando…' : 'Reanudar renovación simulada'} onPress={resumePlan} loading={busy === 'resume'} /> : <PrimaryButton title={busy === 'cancel' ? 'Programando…' : 'Cancelar plan al finalizar el período'} onPress={confirmCancellation} loading={busy === 'cancel'} danger />}
     </Card> : <Card><Text style={{ color: colors.text, fontWeight: '900' }}>No tienes un plan de pago activo</Text><Muted>El plan Gratis no se cobra y no requiere cancelación.</Muted></Card>}
 
-    <SectionTitle>Consentimiento de IA</SectionTitle>
-    <Card><Text style={{ color: colors.text, lineHeight: 25 }}>Al activarlo, permites que la app procese los registros de este perfil para revisiones informativas programadas y el asistente de organización. No diagnostica ni indica tratamientos.</Text><SecondaryButton title={status?.consent.granted ? 'Retirar consentimiento' : 'Autorizar uso de IA'} onPress={() => setConsent(!status?.consent.granted)} /></Card>
-    <SecondaryButton title="Abrir asistente de organización" onPress={() => navigation.navigate('Chat')} />
+    <SecondaryButton title="Ir al centro de IA: uso y permisos" onPress={() => navigation.navigate('Main', { screen: 'IA', params: { screen: 'AICenter' } })} />
   </Screen>;
 }

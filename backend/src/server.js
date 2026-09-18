@@ -1,7 +1,6 @@
 import { app } from './app.js';
 import { env, validateProductionSecrets } from './config/env.js';
 import { db, pingDb } from './config/db.js';
-import { startAiScheduler } from './services/ai-scheduler-service.js';
 import { startMedicationScheduler } from './services/medication-service.js';
 import { log, logError } from './utils/logger.js';
 
@@ -28,7 +27,6 @@ try {
 
 const server = app.listen(env.port, '0.0.0.0', () => {
   log('info', 'api_listening', { port: env.port });
-  startAiScheduler();
   startMedicationScheduler();
 });
 server.on('error', (error) => { void stop('http_server_failed', error); });
