@@ -12,6 +12,10 @@ type Value = {
   error: string;
   refreshProfiles(): Promise<void>;
   selectProfile(id: string): Promise<void>;
+  /** Falso cuando la cuenta solo tiene permiso de consulta sobre el perfil activo. */
+  canEdit: boolean;
+  /** Verdadero si esta cuenta es la titular del perfil activo. */
+  isOwner: boolean;
 };
 const Ctx = createContext<Value | null>(null);
 const nameOf = (p: HealthProfile) => p.displayName || p.display_name || 'Perfil';
@@ -51,7 +55,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }
 
   const selectedProfile = profiles.find((p) => p.id === selectedId) || null;
-  const value = useMemo(() => ({ profiles, selectedProfile, loading, error, refreshProfiles, selectProfile }), [profiles, selectedProfile, loading, error]);
+  const role = selectedProfile?.accessRole || 'OWNER';
+  const value = useMemo(() => ({ profiles, selectedProfile, loading, error, refreshProfiles, selectProfile, canEdit: role !== 'VIEWER', isOwner: role === 'OWNER' }), [profiles, selectedProfile, loading, error, role]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useProfiles() {

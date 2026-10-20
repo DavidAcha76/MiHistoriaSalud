@@ -47,6 +47,8 @@ export function dateParts(value?: string) {
   if (!value || Number.isNaN(date.getTime())) return { day: '—', month: '', year: '' };
   return { day: String(date.getDate()), month: date.toLocaleDateString('es-BO', { month: 'short' }).replace('.', '').toUpperCase(), year: String(date.getFullYear()) };
 }
+/** Finalidad de una revisión con IA (RF-27 / RF-28). */
+export const focusLabels: Record<string, string> = { COMPLETE: 'Resumen y revisión', SUMMARY: 'Resumen informativo', CONSISTENCY: 'Revisión de consistencia' };
 /** Fecha de hoy para cabeceras: «Lunes, 20 de octubre». */
 export function todayLabel() {
   const label = new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });

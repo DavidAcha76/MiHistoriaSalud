@@ -1,11 +1,14 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AppText as Text } from '../components/AppText';
 import { AppAlert as Alert } from '../utils/alerts';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, Disclosure, FormError, Grid, LoadingState, Muted, Pill, Screen, SectionTitle, SecondaryButton } from '../components/ui';
+import { AppTitle, Card, Disclosure, FormError, Grid, IconBadge, LoadingState, Muted, Pill, Screen, SectionTitle, SecondaryButton } from '../components/ui';
+import { RecordPickerModal } from '../components/RecordPickerModal';
+import { DocumentPickerModal } from '../components/DocumentPickerModal';
+import { useFeedback } from '../context/FeedbackContext';
 import { useProfiles } from '../context/ProfileContext';
 import type { HealthEvent } from '../types/domain';
 import { colors, fonts } from '../theme/colors';
@@ -14,7 +17,11 @@ import { detailLabels, detailValue, eventIcon, eventTone, eventTypeLabel, readab
 type Version = { versionNumber: number; action: string; createdAt: string };
 
 export function EventDetailScreen({ route, navigation }: any) {
-  const { selectedProfile } = useProfiles();
+  const { selectedProfile, canEdit } = useProfiles();
+  const notify = useFeedback();
+  const [picking, setPicking] = useState<'record' | 'document' | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [event, setEvent] = useState<HealthEvent | null>(null);
   const [error, setError] = useState('');
   const [versions, setVersions] = useState<Version[]>([]);
@@ -35,11 +42,23 @@ export function EventDetailScreen({ route, navigation }: any) {
       { text: 'Eliminar', style: 'destructive', onPress: async () => { try { await apiRequest(`/profiles/${selectedProfile.id}/events/${eventId}`, { method: 'DELETE' }); navigation.goBack(); } catch (error: any) { Alert.alert('Error', error.message); } } }
     ]);
   }
+  // RF-18: vínculos entre registros y con documentos ya guardados del mismo perfil.
+  async function run(action: () => Promise<unknown>, success: string) {
+    setBusy(true); setActionError('');
+    try { await action(); notify(success); load(); }
+    catch (e: any) { setActionError(e.message || 'No pudimos guardar el cambio.'); }
+    finally { setBusy(false); }
+  }
+  const base = selectedProfile ? `/profiles/${selectedProfile.id}` : '';
+  const linkRecord = (linkedEventId: string) => run(() => apiRequest(`${base}/events/${eventId}/links`, { method: 'POST', body: JSON.stringify({ linkedEventId }) }), 'Registros vinculados.');
+  const unlinkRecord = (linkedEventId: string) => run(() => apiRequest(`${base}/events/${eventId}/links/${linkedEventId}`, { method: 'DELETE' }), 'Vínculo eliminado.');
+  const linkDocument = (documentId: string, target: string | null) => run(() => apiRequest(`${base}/documents/${documentId}`, { method: 'PATCH', body: JSON.stringify({ eventId: target }) }), target ? 'Documento vinculado a este registro.' : 'Documento desvinculado.');
   if (error) return <Screen><FormError message={error} /><SecondaryButton title="Volver a intentar" icon="refresh" onPress={load} /></Screen>;
   if (!event) return <Screen><LoadingState label="Cargando evento…" /></Screen>;
   const date = event.eventDate || event.event_date;
   const type = event.eventType || event.event_type;
   const details = event.details || {};
+  const linked = event.linkedEvents || [];
   const filledDetails = Object.entries(details).filter(([key, value]) => Boolean(detailLabels[key]) && value != null && value !== '');
   return <Screen>
     <View style={styles.typeRow}><Pill label={eventTypeLabel(type)} icon={eventIcon(type)} tone={eventTone(type)} /></View>
@@ -57,13 +76,35 @@ export function EventDetailScreen({ route, navigation }: any) {
     <Disclosure title="Ver historial de cambios">
     <Card>{versions.length ? versions.map((version) => <View key={`${version.versionNumber}-${version.createdAt}`} style={styles.version}><View style={styles.versionDot} /><View style={{ flex: 1 }}><Text style={{ fontWeight: '800', color: colors.text }}>Versión {version.versionNumber} · {({ CREATE: 'Creado', UPDATE: 'Actualizado', DELETE: 'Eliminado' } as Record<string, string>)[version.action] || 'Cambio guardado'}</Text><Muted>{new Date(version.createdAt).toLocaleString()}</Muted></View></View>) : <Muted>No hay historial disponible.</Muted>}</Card>
     </Disclosure>
+    <SectionTitle>Registros vinculados</SectionTitle>
+    <Card>
+      {linked.length ? linked.map((item) => <View key={item.id} style={styles.linkRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} onPress={() => navigation.push('EventDetail', { eventId: item.id })} style={styles.linkOpen}>
+          <IconBadge icon={eventIcon(item.eventType)} tone={eventTone(item.eventType)} size={40} />
+          <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontFamily: fonts.bold }}>{item.title}</Text><Muted>{readableDate(item.eventDate)} · {eventTypeLabel(item.eventType)}</Muted></View>
+        </Pressable>
+        {canEdit ? <Pressable accessibilityRole="button" accessibilityLabel={`Quitar el vínculo con ${item.title}`} onPress={() => { void unlinkRecord(item.id); }} disabled={busy} style={styles.unlink}><MaterialCommunityIcons name="link-variant-off" size={22} color={colors.danger} /></Pressable> : null}
+      </View>) : <Muted>Puedes relacionar este registro con otros, por ejemplo un resultado de laboratorio con la consulta en la que se pidió.</Muted>}
+      {canEdit ? <SecondaryButton title="Vincular un registro" icon="link-variant-plus" onPress={() => setPicking('record')} disabled={busy} /> : null}
+    </Card>
     <SectionTitle>Documentos vinculados</SectionTitle>
-    <Card>{event.documents?.length ? event.documents.map((document) => <View key={document.id} style={styles.document}><MaterialCommunityIcons name="file-document-outline" size={22} color={colors.accent} /><Text style={{ color: colors.text, flex: 1 }}>{document.originalName || document.original_name}</Text></View>) : <Muted>No hay documentos vinculados.</Muted>}</Card>
-    <Grid min={260} gap={12}>
+    <Card>
+      {event.documents?.length ? event.documents.map((document) => <View key={document.id} style={styles.linkRow}>
+        <View style={styles.document}><MaterialCommunityIcons name="file-document-outline" size={22} color={colors.accent} /><Text style={{ color: colors.text, flex: 1 }}>{document.originalName || document.original_name}</Text></View>
+        {canEdit ? <Pressable accessibilityRole="button" accessibilityLabel={`Desvincular ${document.originalName || document.original_name}`} onPress={() => { void linkDocument(document.id, null); }} disabled={busy} style={styles.unlink}><MaterialCommunityIcons name="link-variant-off" size={22} color={colors.danger} /></Pressable> : null}
+      </View>) : <Muted>No hay documentos vinculados.</Muted>}
+      {canEdit ? <SecondaryButton title="Vincular un documento guardado" icon="paperclip" onPress={() => setPicking('document')} disabled={busy} /> : null}
+    </Card>
+    <FormError message={actionError} />
+    {canEdit ? <Grid min={260} gap={12}>
       <SecondaryButton title="Editar registro" icon="pencil-outline" onPress={() => navigation.navigate('EventForm', { eventId })} />
-      <SecondaryButton title="Añadir documento a este registro" icon="paperclip" onPress={() => navigation.navigate('DocumentUpload', { eventId })} />
+      <SecondaryButton title="Añadir documento a este registro" icon="file-upload-outline" onPress={() => navigation.navigate('DocumentUpload', { eventId })} />
       <SecondaryButton title="Eliminar registro" icon="trash-can-outline" danger onPress={remove} />
-    </Grid>
+    </Grid> : <Muted>Tu permiso sobre este perfil es solo de consulta.</Muted>}
+    {selectedProfile ? <>
+      <RecordPickerModal visible={picking === 'record'} profileId={selectedProfile.id} title="Vincular un registro" hint={`Elige el registro que quieres relacionar con «${event.title}».`} excludeIds={[eventId, ...linked.map((item) => item.id)]} onClose={() => setPicking(null)} onSelect={(record) => { setPicking(null); void linkRecord(record.id); }} />
+      <DocumentPickerModal visible={picking === 'document'} profileId={selectedProfile.id} eventId={eventId} onClose={() => setPicking(null)} onSelect={(document) => { setPicking(null); void linkDocument(document.id, eventId); }} />
+    </> : null}
   </Screen>;
 }
 
@@ -75,5 +116,8 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 15, lineHeight: 22, fontFamily: fonts.bold, color: colors.muted, marginBottom: 2 },
   version: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 12 },
   versionDot: { width: 10, height: 10, borderRadius: 5, marginTop: 9, backgroundColor: colors.primary },
-  document: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }
+  document: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  linkOpen: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  unlink: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: colors.borderSoft }
 });

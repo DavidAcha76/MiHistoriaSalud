@@ -9,17 +9,26 @@ import { DateField } from '../components/DateField';
 import { ProfileSelector } from '../components/ProfileSelector';
 import { useProfiles } from '../context/ProfileContext';
 import { useLayout } from '../hooks/useLayout';
-import type { EventType, PagedEvents } from '../types/domain';
+import type { ClinicalDocument, EventType, PagedEvents } from '../types/domain';
 import { colors, fonts, shadows } from '../theme/colors';
 import { shadow } from '../theme/effects';
 import { dateParts, eventIcon, eventLabels, eventTone, eventTypeLabel, readableDate } from '../utils/presentation';
 
+/** CU-08: los registros se agrupan por mes para navegar entre periodos. */
+function monthLabel(value?: string) {
+  const date = new Date(`${(value || '').slice(0, 10)}T12:00:00`);
+  if (!value || Number.isNaN(date.getTime())) return 'Sin fecha';
+  const label = date.toLocaleDateString('es-BO', { month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 type Filters = { q: string; from: string; to: string; type: '' | EventType };
 const emptyFilters: Filters = { q: '', from: '', to: '', type: '' };
 export function TimelineScreen({ navigation }: any) {
-  const { selectedProfile } = useProfiles();
+  const { selectedProfile, canEdit } = useProfiles();
   const { compact } = useLayout();
   const [data, setData] = useState<PagedEvents | null>(null);
+  const [docMatches, setDocMatches] = useState<ClinicalDocument[]>([]);
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [page, setPage] = useState(1);
@@ -34,7 +43,11 @@ export function TimelineScreen({ navigation }: any) {
     setLoading(true);
     const query = new URLSearchParams({ pageSize: '20', page: String(page) });
     Object.entries(filters).forEach(([key, value]) => { if (value.trim()) query.set(key, value.trim()); });
-    apiRequest<PagedEvents>(`/profiles/${selectedProfile.id}/events?${query}`).then((response) => { if (active) setData(response); }).catch(() => { if (active) setError('No pudimos cargar el historial. Revisa tu conexión y vuelve a intentar.'); }).finally(() => { if (active) setLoading(false); });
+    // RF-23: con palabras clave se busca también en campos estructurados y nombres de documentos.
+    const request = filters.q.trim()
+      ? apiRequest<{ events: PagedEvents; documents: ClinicalDocument[] }>(`/profiles/${selectedProfile.id}/search?${query}`).then((response) => ({ events: response.events, documents: response.documents }))
+      : apiRequest<PagedEvents>(`/profiles/${selectedProfile.id}/events?${query}`).then((events) => ({ events, documents: [] as ClinicalDocument[] }));
+    request.then((response) => { if (active) { setData(response.events); setDocMatches(response.documents); } }).catch(() => { if (active) setError('No pudimos cargar el historial. Revisa tu conexión y vuelve a intentar.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [selectedProfile?.id, filters, page, reload]));
   function search() {
@@ -58,14 +71,18 @@ export function TimelineScreen({ navigation }: any) {
     <Grid min={240} gap={12}>
       <PrimaryButton title="Buscar en mi historial" icon="magnify" onPress={search} loading={loading} disabled={!selectedProfile} />
       {filtered ? <SecondaryButton title="Quitar filtros y ver todo" icon="filter-remove-outline" onPress={() => { setDraft(emptyFilters); setFilters(emptyFilters); setPage(1); }} /> : null}
-      <SecondaryButton title="+ Añadir un registro" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile} />
+      {canEdit ? <SecondaryButton title="+ Añadir un registro" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile} /> : null}
     </Grid>
     <SectionTitle right={data && !loading && !error ? <Pill label={`${data.total} ${data.total === 1 ? 'registro' : 'registros'}`} tone="accent" icon="timeline-text-outline" /> : null}>{filtered ? 'Resultados de tu búsqueda' : 'Tus registros'}</SectionTitle>
     {loading ? <LoadingState /> : error ? <><FormError message={error} /><SecondaryButton title="Volver a intentar" icon="refresh" onPress={() => setReload((value) => value + 1)} /></> : null}
     {items.map((event, index) => {
       const parts = dateParts(event.eventDate);
       const type = event.eventType;
-      return <View key={event.id} style={styles.row}>
+      const month = monthLabel(event.eventDate);
+      const newGroup = index === 0 || monthLabel(items[index - 1].eventDate) !== month;
+      return <React.Fragment key={event.id}>
+      {newGroup ? <View style={styles.group}><MaterialCommunityIcons name="calendar-month-outline" size={18} color={colors.primary} /><Text accessibilityRole="header" style={styles.groupText}>{month}</Text></View> : null}
+      <View style={styles.row}>
         <View style={[styles.rail, compact && styles.railCompact]}>
           <View style={[styles.dateBox, compact && styles.dateBoxCompact]}><Text style={styles.day}>{parts.day}</Text><Text style={styles.month}>{parts.month}</Text></View>
           {index < items.length - 1 ? <View style={styles.line} /> : null}
@@ -80,8 +97,17 @@ export function TimelineScreen({ navigation }: any) {
           {event.description ? <Text numberOfLines={3} style={styles.description}>{event.description}</Text> : null}
           <View style={styles.open}><Text style={styles.openText}>Ver registro</Text><MaterialCommunityIcons name="arrow-right" size={18} color={colors.primary} /></View>
         </Pressable>
-      </View>;
+      </View>
+      </React.Fragment>;
     })}
+    {!loading && !error && docMatches.length ? <>
+      <SectionTitle right={<Pill label={String(docMatches.length)} tone="accent" />}>Documentos que coinciden</SectionTitle>
+      {docMatches.map((document) => <Pressable key={document.id} accessibilityRole="button" accessibilityLabel={`Ver documentos: ${document.originalName}`} onPress={() => document.eventId ? navigation.navigate('EventDetail', { eventId: document.eventId }) : navigation.navigate('Documents')} style={(state) => [styles.docMatch, (state as PressState).hovered && styles.cardHovered]}>
+        <MaterialCommunityIcons name={(document.mimeType || '').includes('pdf') ? 'file-pdf-box' : 'file-image-outline'} size={26} color={colors.accent} />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontFamily: fonts.bold }}>{document.originalName}</Text><Muted>{document.eventId ? 'Abrir el registro vinculado' : 'Abrir Mis documentos'}</Muted></View>
+        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.primary} />
+      </Pressable>)}
+    </> : null}
     {!loading && !error && data && !data.items.length ? <EmptyState icon={filtered ? 'file-search-outline' : 'notebook-plus-outline'} title={filtered ? 'No encontramos coincidencias' : 'Tu historial está listo para empezar'} text={filtered ? 'Prueba con otra palabra o quita los filtros para ver todos los registros.' : 'Añade una consulta, una molestia o un resultado. Lo encontrarás aquí por fecha.'} /> : null}
     {data && data.totalPages > 1 ? <View style={styles.pagination}>
       <Muted>Página {data.page} de {data.totalPages} · {data.total} registros</Muted>
@@ -95,6 +121,9 @@ export function TimelineScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap' },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 12 },
+  groupText: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 22, color: colors.primary, letterSpacing: 0.4 },
+  docMatch: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, marginBottom: 10, borderRadius: 18, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.surface },
   row: { flexDirection: 'row', gap: 14 },
   rail: { width: 64, alignItems: 'center' },
   railCompact: { width: 54 },

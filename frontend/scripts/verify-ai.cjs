@@ -66,7 +66,7 @@ const status = (profileId) => ({
         messages.push({ id: 'message-1', role: 'USER', content: body.message }, reply);
         payload = { conversationId: 'conversation-1', message: reply, remaining: 0 };
       }
-      else if (endpoint.endsWith('/ai/analyze')) { analysisCalls++; analyzed = true; payload = result; }
+      else if (/\/ai\/(analyze|review)$/.test(endpoint)) { analysisCalls++; analyzed = true; payload = result; }
       else if (endpoint.endsWith('/ai/consent')) { granted = req.postDataJSON().granted; payload = { granted }; }
       else if (endpoint.endsWith('/ai/analyses')) payload = [{ id: 'analysis-1', purpose: 'Organizar registros de prueba', createdAt: '2026-09-18T00:00:00Z', mode: 'SCHEDULED', status: 'COMPLETED', output: result }];
       else if (endpoint === '/notifications') payload = [];

@@ -38,6 +38,7 @@ export function MoreScreen({ navigation }: any) {
       <MenuTile icon="stethoscope" label="Preparar mi consulta" hint="Un resumen de mis registros" onPress={() => navigation.navigate('Summary')} />
       <MenuTile icon="share-variant-outline" label="Compartir o descargar" hint="Elegir qué información compartir" onPress={() => navigation.navigate('Share')} tone="accent" />
       <MenuTile icon="bell-outline" label="Avisos" hint="Recordatorios y novedades" onPress={() => navigation.navigate('Notifications')} tone="warning" />
+      <MenuTile icon="shield-search" label="Actividad y trazabilidad" hint="Quién consultó o modificó la información" onPress={() => navigation.navigate('Audit')} tone="ai" />
     </MenuGrid>
     <Disclosure title="Cómo usar Clinia, paso a paso">
       <Grid min={260}>

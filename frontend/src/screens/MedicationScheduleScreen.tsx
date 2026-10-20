@@ -16,7 +16,7 @@ import { localDate, readableDate } from '../utils/presentation';
 const dayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 type Confirmation = { regimen: MedicationRegimen; slot?: MedicationDoseSlot };
 export function MedicationScheduleScreen({ navigation }: any) {
-  const { selectedProfile } = useProfiles();
+  const { selectedProfile, canEdit } = useProfiles();
   const { twoColumns } = useLayout();
   const [items, setItems] = useState<MedicationRegimen[]>([]);
   const [error, setError] = useState('');
@@ -86,17 +86,17 @@ export function MedicationScheduleScreen({ navigation }: any) {
       {regimen.notes ? <Text style={styles.notes}>{regimen.notes}</Text> : null}
       {!regimen.isActive ? <View style={[styles.state, styles.paused]}><MaterialCommunityIcons name="bell-off-outline" size={22} color={colors.warning} /><Text style={{ flex: 1, color: colors.warning }}>Recordatorios pausados</Text></View> : regimen.adherence.pending.length ? <View style={styles.pending}>
         <View style={styles.pendingHeading}><MaterialCommunityIcons name="clock-alert-outline" size={22} color={colors.warning} /><Text style={{ fontFamily: fonts.bold, flex: 1 }}>Tomas de hoy sin confirmar</Text></View>
-        {regimen.adherence.pending.map((slot) => <PrimaryButton key={`${slot.scheduledDate}-${slot.scheduledTime}`} title={`Ya tomé la de las ${slot.scheduledTime}`} icon="check" disabled={Boolean(busyKey) || Boolean(error)} loading={busyKey === regimen.id} onPress={() => setConfirmation({ regimen, slot })} />)}
+        {regimen.adherence.pending.map((slot) => <PrimaryButton key={`${slot.scheduledDate}-${slot.scheduledTime}`} title={`Ya tomé la de las ${slot.scheduledTime}`} icon="check" disabled={Boolean(busyKey) || Boolean(error) || !canEdit} loading={busyKey === regimen.id} onPress={() => setConfirmation({ regimen, slot })} />)}
       </View> : <View style={[styles.state, styles.done]}><MaterialCommunityIcons name="check-circle-outline" size={24} color={colors.success} /><Text style={{ flex: 1 }}>Por ahora no hay tomas pendientes de confirmar.</Text></View>}
       <Disclosure title="Ver seguimiento y recordatorios">
         <View style={styles.followHeading}><Text style={{ fontFamily: fonts.bold, flex: 1 }}>Últimos 30 días</Text><Text style={styles.followValue}>{regimen.adherence.confirmed}/{regimen.adherence.total}</Text></View>
         <ProgressBar value={regimen.adherence.total ? regimen.adherence.confirmed / regimen.adherence.total : 0} label={`${regimen.adherence.confirmed} tomas confirmadas de ${regimen.adherence.total}`} />
         <Muted style={{ marginTop: 10 }}>{regimen.adherence.confirmed} tomas confirmadas de {regimen.adherence.total} esperadas. Este conteo no evalúa tu salud.</Muted>
-        <SecondaryButton title={regimen.isActive ? 'Pausar recordatorios' : 'Reanudar recordatorios'} icon={regimen.isActive ? 'bell-off-outline' : 'bell-ring-outline'} onPress={() => setConfirmation({ regimen })} disabled={Boolean(busyKey) || Boolean(error)} />
+        <SecondaryButton title={regimen.isActive ? 'Pausar recordatorios' : 'Reanudar recordatorios'} icon={regimen.isActive ? 'bell-off-outline' : 'bell-ring-outline'} onPress={() => setConfirmation({ regimen })} disabled={Boolean(busyKey) || Boolean(error) || !canEdit} />
       </Disclosure>
     </Card>)}</Grid>}
     {!loading && !error && selectedProfile && !items.length ? <EmptyState icon="pill" title="Añade tu primer medicamento" text="Guarda el nombre y el horario indicado por tu profesional. Luego podrás anotar cada toma aquí." /> : null}
-    <PrimaryButton title="+ Añadir un medicamento" onPress={() => navigation.navigate('MedicationForm')} disabled={!selectedProfile || Boolean(busyKey)} />
+    {canEdit ? <PrimaryButton title="+ Añadir un medicamento" onPress={() => navigation.navigate('MedicationForm')} disabled={!selectedProfile || Boolean(busyKey)} /> : <Muted>Tu permiso sobre este perfil es solo de consulta: puedes ver los horarios, pero no confirmar tomas ni modificarlos.</Muted>}
     <View style={styles.footnote}><MaterialCommunityIcons name="information-outline" size={20} color={colors.muted} /><Muted style={{ flex: 1 }}>Los recordatorios se consultan dentro de la app. Sigue siempre la pauta indicada por tu profesional.</Muted></View>
     <ConfirmationDialog visible={Boolean(confirmation)} title={confirmation?.slot ? '¿Ya tomaste este medicamento?' : confirmation?.regimen.isActive ? '¿Pausar los recordatorios?' : '¿Reanudar los recordatorios?'} message={confirmation ? `${confirmation.regimen.medicationName}${confirmation.regimen.dose ? ` · ${confirmation.regimen.dose}` : ''}\n${confirmation.slot ? `Toma de las ${confirmation.slot.scheduledTime}, ${readableDate(confirmation.slot.scheduledDate)}. Confirma solo si ya la tomaste.` : 'Esto cambia los avisos de la app. No cambia tu tratamiento.'}` : ''} confirmTitle={confirmation?.slot ? 'Sí, ya la tomé' : 'Sí, cambiar recordatorios'} onConfirm={() => { void performAction(); }} onCancel={() => setConfirmation(null)} />
   </Screen>;

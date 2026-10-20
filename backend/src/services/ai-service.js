@@ -68,13 +68,32 @@ async function requestCompletion(payload) {
   }
 }
 
-function demoResponse(events) {
+function demoResponse(events, focus = 'COMPLETE') {
   const missing = [];
   for (const event of events) {
     if (!event.description) missing.push(`El registro "${event.title}" no incluye una descripción.`);
     if (!event.source) missing.push(`El registro "${event.title}" no indica una fuente o institución.`);
   }
+  const seen = new Map();
+  const duplicates = [];
+  for (const event of events) {
+    const key = `${String(event.title).trim().toLowerCase()}|${event.event_date}`;
+    if (seen.has(key)) duplicates.push(`Los registros "${event.title}" del ${event.event_date} parecen duplicados; conviene confirmar si corresponden al mismo acontecimiento.`);
+    seen.set(key, true);
+  }
   const names = events.slice(0, 6).map((e) => `${e.event_date}: ${e.title}`).join('; ');
+  if (focus === 'CONSISTENCY') {
+    return {
+      provider: 'local-demo',
+      model: 'deterministic-demo',
+      output: normalizeAiPayload({
+        summary: `Modo demostración: revisión de consistencia de ${events.length} registros seleccionados.`,
+        incompleteData: missing.slice(0, 10),
+        contradictions: duplicates.slice(0, 10),
+        questions: ['¿Qué datos de los registros señalados conviene confirmar antes de la próxima consulta?']
+      })
+    };
+  }
   return {
     provider: 'local-demo',
     model: 'deterministic-demo',
@@ -98,11 +117,19 @@ export function selectedEventVersions(events) {
   return events.map((event) => ({ id: event.id, version: Number(event.record_version || 0) }));
 }
 
-export async function analyzeSelectedEvents(events, purpose = 'Revisión de información seleccionada') {
+/** RF-27 resumen informativo; RF-28 revisión de consistencia; COMPLETE combina ambas finalidades. */
+export const REVIEW_FOCUS = ['COMPLETE', 'SUMMARY', 'CONSISTENCY'];
+const focusInstructions = {
+  COMPLETE: 'Resume la selección, señala campos incompletos y contradicciones textuales justificables, y prepara preguntas para consulta.',
+  SUMMARY: 'Prioriza un resumen informativo, fiel y ordenado por fecha de la selección. Incluye campos incompletos o contradicciones solo si son evidentes y prepara preguntas neutrales.',
+  CONSISTENCY: 'Prioriza la revisión de consistencia: identifica campos incompletos, duplicaciones y contradicciones textuales justificables, citando la referencia y los datos que la sustentan. El resumen debe ser breve.'
+};
+
+export async function analyzeSelectedEvents(events, purpose = 'Revisión de información seleccionada', focus = 'COMPLETE') {
   const context = medicalContext(events);
-  if (env.ai.mockMode) return demoResponse(events);
+  if (env.ai.mockMode) return demoResponse(events, focus);
   const system = `${sharedSystem}
-Resume la selección, señala campos incompletos y contradicciones textuales justificables, y prepara preguntas para consulta.
+${focusInstructions[focus] || focusInstructions.COMPLETE}
 Devuelve SOLO JSON válido con las claves summary, incompleteData, contradictions, questions.`;
 
   const content = await requestCompletion({

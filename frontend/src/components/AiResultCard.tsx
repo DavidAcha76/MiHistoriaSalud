@@ -2,9 +2,10 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AppText as Text } from './AppText';
-import { Card, IconBadge, Muted, type IconName, type Tone } from './ui';
+import { Card, IconBadge, Muted, Pill, type IconName, type Tone } from './ui';
 import type { AiResult } from '../types/domain';
 import { colors, fonts } from '../theme/colors';
+import { focusLabels } from '../utils/presentation';
 
 export function AiResultCard({ result }: { result: AiResult }) {
   const sections: Array<[string, string[], string, IconName, Tone]> = [
@@ -13,6 +14,14 @@ export function AiResultCard({ result }: { result: AiResult }) {
     ['Preguntas para tu consulta', result.questions, 'No se añadieron preguntas.', 'comment-question-outline', 'primary']
   ];
   return <Card style={{ borderColor: '#46597D' }}>
+    {result.createdAt || result.purpose || result.focus ? <View style={styles.meta}>
+      <View style={styles.pills}>
+        <Pill label="Generado con IA · informativo" icon="creation" tone="ai" />
+        {result.focus ? <Pill label={focusLabels[result.focus] || result.focus} tone="neutral" /> : null}
+      </View>
+      {result.createdAt ? <Muted>Generado el {new Date(result.createdAt).toLocaleString('es-BO')}{result.selectedCount ? ` · ${result.selectedCount} ${result.selectedCount === 1 ? 'registro seleccionado' : 'registros seleccionados'}` : ''}</Muted> : null}
+      {result.purpose ? <Muted>Finalidad: {result.purpose}</Muted> : null}
+    </View> : null}
     <View style={styles.summary}>
       <IconBadge icon="creation" tone="ai" size={44} />
       <Text style={styles.summaryText}>{result.summary}</Text>
@@ -26,6 +35,8 @@ export function AiResultCard({ result }: { result: AiResult }) {
 }
 
 const styles = StyleSheet.create({
+  meta: { gap: 4, paddingBottom: 14, marginBottom: 16, borderBottomWidth: 1, borderColor: colors.borderSoft },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   summary: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
   summaryText: { flex: 1, color: colors.text, lineHeight: 27 },
   section: { marginTop: 22, gap: 8 },

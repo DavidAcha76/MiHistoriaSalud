@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, Chip, FormError, LoadingState, Muted, SecondaryButton } from './ui';
 import { nameOf, useProfiles } from '../context/ProfileContext';
 import { useLayout } from '../hooks/useLayout';
+import { roleLabels } from '../utils/audit';
 import { colors, fonts, shadows } from '../theme/colors';
 import { shadow } from '../theme/effects';
 
@@ -15,6 +16,7 @@ export function ProfileSelector({ locked = false }: { locked?: boolean }) {
   if (error) return <View><FormError message={error} /><SecondaryButton title="Volver a cargar perfiles" onPress={() => { void refreshProfiles(); }} /></View>;
   if (!selectedProfile) return <Muted>No hay un perfil seleccionado. Abre Más → Perfiles para añadir uno.</Muted>;
   const canChange = !locked && profiles.length > 1;
+  const shared = Boolean(selectedProfile.accessRole && selectedProfile.accessRole !== 'OWNER');
   const toggle = canChange ? <SecondaryButton title={open ? 'Cerrar selección de persona' : 'Cambiar de persona'} icon={open ? 'close' : 'account-switch-outline'} onPress={() => setOpen(!open)} /> : null;
   return <View style={styles.box}>
     <View style={[styles.row, twoColumns && styles.rowWide]}>
@@ -23,6 +25,7 @@ export function ProfileSelector({ locked = false }: { locked?: boolean }) {
         <View style={styles.copy}>
           <Text style={styles.caption}>Información de salud de</Text>
           <Text style={styles.name}>{nameOf(selectedProfile)}</Text>
+          {shared ? <Text style={styles.shared}>Compartido por {selectedProfile.ownerName || 'otra cuenta'} · {roleLabels[selectedProfile.accessRole || 'VIEWER']}</Text> : null}
         </View>
         {locked ? <MaterialCommunityIcons name="lock-outline" size={22} color={colors.muted} accessibilityLabel="Persona fija en este formulario" /> : null}
       </View>
@@ -41,5 +44,6 @@ const styles = StyleSheet.create({
   copy: { flex: 1, minWidth: 0 },
   caption: { color: colors.muted, fontFamily: fonts.medium, fontSize: 15, lineHeight: 22 },
   name: { color: colors.text, fontFamily: fonts.bold, fontSize: 18, lineHeight: 27 },
+  shared: { color: colors.accent, fontFamily: fonts.semibold, fontSize: 15, lineHeight: 22 },
   options: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 }
 });

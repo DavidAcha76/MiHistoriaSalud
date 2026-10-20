@@ -30,6 +30,7 @@ export function ChatScreen(props: any) {
 function ChatForProfile({ navigation }: any) {
   const { profileId, data, error, loading, refresh } = useProfileResource(fetchChat);
   const { twoColumns } = useLayout();
+  const { canEdit } = useProfiles();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -38,7 +39,7 @@ function ChatForProfile({ navigation }: any) {
   const inFlight = useRef(false);
   useEffect(() => { if (data) setMessages(data.chat.messages); }, [data]);
   const reason = aiBlockedReason(data?.status || null, 'chat');
-  const chatAvailable = Boolean(profileId && data && !reason && !sending);
+  const chatAvailable = Boolean(profileId && data && !reason && !sending && canEdit);
 
   async function send() {
     if (!profileId || !chatAvailable || !text.trim() || inFlight.current) return;

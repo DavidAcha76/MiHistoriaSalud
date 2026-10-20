@@ -6,7 +6,7 @@ import { assertProfileAccess } from '../middleware/profile-access.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { HttpError } from '../utils/http-error.js';
 import { audit } from '../services/audit-service.js';
-import { createEvent, deleteEvent, EVENT_TYPES, getEventById, updateEvent } from '../services/event-service.js';
+import { createEvent, deleteEvent, EVENT_TYPES, getEventById, linkEvents, searchCondition, unlinkEvents, updateEvent } from '../services/event-service.js';
 
 export const eventRouter = express.Router();
 eventRouter.use(requireAuth);
@@ -30,40 +30,54 @@ function toPositiveInt(value, fallback, max) {
   return Math.min(n, max);
 }
 
-eventRouter.get('/profiles/:profileId/events', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
-  const page = toPositiveInt(req.query.page, 1, 100000);
-  const pageSize = toPositiveInt(req.query.pageSize, 20, 100);
+/** RF-22 a RF-24 / RNF-09: filtros y paginación del lado del servidor con consultas parametrizadas. */
+async function listEvents(profileId, query) {
+  const page = toPositiveInt(query.page, 1, 100000);
+  const pageSize = toPositiveInt(query.pageSize, 20, 100);
   const offset = (page - 1) * pageSize;
-  const params = [req.params.profileId];
+  const params = [profileId];
   const where = ['profile_id = ?'];
 
-  if (req.query.type) {
-    const type = eventType.parse(req.query.type);
+  if (query.type) {
     where.push('event_type = ?');
-    params.push(type);
+    params.push(eventType.parse(query.type));
   }
-  if (req.query.from) {
-    const from = z.string().date().parse(req.query.from);
-    where.push('event_date >= ?'); params.push(from);
-  }
-  if (req.query.to) {
-    const to = z.string().date().parse(req.query.to);
-    where.push('event_date <= ?'); params.push(to);
-  }
-  if (req.query.q) {
-    const q = String(req.query.q).trim().slice(0, 100);
-    where.push('(title LIKE ? OR description LIKE ? OR source LIKE ?)');
-    const like = `%${q}%`; params.push(like, like, like);
-  }
+  const from = query.from ? z.string().date().parse(query.from) : null;
+  const to = query.to ? z.string().date().parse(query.to) : null;
+  if (from && to && from > to) throw new HttpError(400, 'La fecha de inicio debe ser anterior a la fecha final.');
+  if (from) { where.push('event_date >= ?'); params.push(from); }
+  if (to) { where.push('event_date <= ?'); params.push(to); }
+  const search = searchCondition(query.q);
+  if (search) { where.push(search.sql); params.push(...search.params); }
 
   const [countRows] = await db.execute(`SELECT COUNT(*) AS total FROM health_events WHERE ${where.join(' AND ')}`, params);
   const [rows] = await db.execute(
     `SELECT id, profile_id AS profileId, event_type AS eventType, title, description, event_date AS eventDate, source, notes, created_at AS createdAt, updated_at AS updatedAt
-       FROM health_events WHERE ${where.join(' AND ')} ORDER BY event_date DESC, created_at DESC LIMIT ? OFFSET ?`,
-    [...params, pageSize, offset]
+       FROM health_events WHERE ${where.join(' AND ')} ORDER BY event_date DESC, created_at DESC LIMIT ${pageSize} OFFSET ${offset}`,
+    params
   );
-  res.json({ items: rows, page, pageSize, total: countRows[0].total, totalPages: Math.ceil(countRows[0].total / pageSize) });
+  const total = Number(countRows[0].total);
+  return { items: rows, page, pageSize, total, totalPages: Math.ceil(total / pageSize) };
+}
+
+eventRouter.get('/profiles/:profileId/events', asyncHandler(async (req, res) => {
+  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  res.json(await listEvents(req.params.profileId, req.query));
+}));
+
+// RF-23 / CU-09: búsqueda por palabras clave en registros y nombres de documentos del perfil.
+eventRouter.get('/profiles/:profileId/search', asyncHandler(async (req, res) => {
+  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  const search = searchCondition(req.query.q);
+  if (!search) throw new HttpError(400, 'Escribe al menos una palabra para buscar.');
+  const events = await listEvents(req.params.profileId, req.query);
+  const like = `%${search.q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+  const [documents] = await db.execute(
+    `SELECT id, event_id AS eventId, original_name AS originalName, mime_type AS mimeType, size_bytes AS sizeBytes, created_at AS createdAt
+       FROM clinical_documents WHERE profile_id = ? AND original_name LIKE ? ORDER BY created_at DESC LIMIT 20`,
+    [req.params.profileId, like]
+  );
+  res.json({ query: search.q, events, documents });
 }));
 
 eventRouter.get('/profiles/:profileId/symptom-recurrences', asyncHandler(async (req, res) => {
@@ -85,7 +99,7 @@ eventRouter.get('/profiles/:profileId/symptom-recurrences', asyncHandler(async (
 }));
 
 eventRouter.post('/profiles/:profileId/events', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = createSchema.parse(req.body);
   const event = await createEvent({ profileId: req.params.profileId, userId: req.auth.userId, body });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'CREATE', resourceType: 'HEALTH_EVENT', resourceId: event.id, metadata: { type: body.eventType }, ip: req.ip });
@@ -110,7 +124,7 @@ eventRouter.get('/profiles/:profileId/events/:eventId/versions', asyncHandler(as
 }));
 
 eventRouter.patch('/profiles/:profileId/events/:eventId', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = updateSchema.parse(req.body);
   const event = await updateEvent({ eventId: req.params.eventId, profileId: req.params.profileId, userId: req.auth.userId, body });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'UPDATE', resourceType: 'HEALTH_EVENT', resourceId: event.id, ip: req.ip });
@@ -118,8 +132,29 @@ eventRouter.patch('/profiles/:profileId/events/:eventId', asyncHandler(async (re
 }));
 
 eventRouter.delete('/profiles/:profileId/events/:eventId', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   await deleteEvent({ eventId: req.params.eventId, profileId: req.params.profileId, userId: req.auth.userId });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'DELETE', resourceType: 'HEALTH_EVENT', resourceId: req.params.eventId, ip: req.ip });
+  res.status(204).end();
+}));
+
+// RF-18: vincular registros del mismo perfil (por ejemplo, un resultado de laboratorio con su consulta).
+const linkSchema = z.object({ linkedEventId: z.string().uuid() });
+
+eventRouter.post('/profiles/:profileId/events/:eventId/links', asyncHandler(async (req, res) => {
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
+  const eventId = z.string().uuid().parse(req.params.eventId);
+  const { linkedEventId } = linkSchema.parse(req.body);
+  const result = await linkEvents({ profileId: req.params.profileId, eventId, linkedEventId, userId: req.auth.userId });
+  if (result.created) await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'LINK', resourceType: 'HEALTH_EVENT', resourceId: eventId, metadata: { linkedEventId }, ip: req.ip });
+  res.status(result.created ? 201 : 200).json(await getEventById(eventId, req.params.profileId));
+}));
+
+eventRouter.delete('/profiles/:profileId/events/:eventId/links/:linkedEventId', asyncHandler(async (req, res) => {
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
+  const eventId = z.string().uuid().parse(req.params.eventId);
+  const linkedEventId = z.string().uuid().parse(req.params.linkedEventId);
+  await unlinkEvents({ profileId: req.params.profileId, eventId, linkedEventId });
+  await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'UNLINK', resourceType: 'HEALTH_EVENT', resourceId: eventId, metadata: { linkedEventId }, ip: req.ip });
   res.status(204).end();
 }));

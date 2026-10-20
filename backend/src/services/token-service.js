@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { sha256 } from '../utils/security.js';
 
-export function createAccessToken(user) {
-  return jwt.sign({ email: user.email }, env.jwt.accessSecret, { subject: user.id, expiresIn: env.jwt.accessTtl });
+/** `sid` identifica la sesión (fila de refresh_tokens); revocarla invalida también este token. */
+export function createAccessToken(user, sessionId) {
+  return jwt.sign({ email: user.email, sid: sessionId }, env.jwt.accessSecret, { subject: user.id, expiresIn: env.jwt.accessTtl });
 }
 
 export function createRefreshToken(user) {

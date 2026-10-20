@@ -16,12 +16,13 @@ test('el almacenamiento de base conserva una única copia que cualquier instanci
     const file = {
       originalname: 'resultado.pdf',
       mimetype: 'application/pdf',
-      buffer: Buffer.from('contenido clínico de prueba')
+      buffer: Buffer.from('%PDF-1.4 contenido clínico de prueba')
     };
+    file.size = file.buffer.length;
     const saved = await savePrivateFile(file, '00000000-0000-4000-8000-000000000001');
     assert.equal(saved.driver, 'database');
     assert.match(saved.key, /\.pdf$/);
-    assert.equal(await readStream((await openPrivateFile(saved.driver, saved.key, saved.content)).stream).then((body) => body.toString()), 'contenido clínico de prueba');
+    assert.equal(await readStream((await openPrivateFile(saved.driver, saved.key, saved.content)).stream).then((body) => body.toString()), '%PDF-1.4 contenido clínico de prueba');
   } finally {
     env.storage.driver = originalDriver;
   }

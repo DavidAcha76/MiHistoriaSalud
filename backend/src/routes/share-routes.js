@@ -33,7 +33,7 @@ shareRouter.get('/profiles/:profileId/share-packages', asyncHandler(async (req, 
 }));
 
 shareRouter.post('/profiles/:profileId/share-packages', asyncHandler(async (req, res) => {
-  const profile = await assertProfileAccess(req.auth.userId, req.params.profileId);
+  const profile = await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = createSchema.parse(req.body);
   const eventIds = [...new Set(body.eventIds)];
   const documentIds = [...new Set(body.documentIds)];
@@ -62,7 +62,7 @@ shareRouter.post('/profiles/:profileId/share-packages', asyncHandler(async (req,
 }));
 
 shareRouter.post('/profiles/:profileId/share-packages/:packageId/revoke', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const packageId = z.string().uuid().parse(req.params.packageId);
   const [result] = await db.execute(
     'UPDATE share_packages SET revoked_at=COALESCE(revoked_at, CURRENT_TIMESTAMP) WHERE id=? AND profile_id=?',
@@ -74,7 +74,7 @@ shareRouter.post('/profiles/:profileId/share-packages/:packageId/revoke', asyncH
 }));
 
 shareRouter.get('/profiles/:profileId/data-export', asyncHandler(async (req, res) => {
-  const profile = await assertProfileAccess(req.auth.userId, req.params.profileId);
+  const profile = await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const [eventRows, documentRows, analyses] = await Promise.all([
     db.execute('SELECT id FROM health_events WHERE profile_id=? ORDER BY event_date ASC', [profile.id]),
     db.execute(`SELECT id, original_name AS originalName, mime_type AS mimeType, size_bytes AS sizeBytes, created_at AS createdAt FROM clinical_documents WHERE profile_id=? ORDER BY created_at ASC`, [profile.id]),

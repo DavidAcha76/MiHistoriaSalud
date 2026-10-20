@@ -51,6 +51,18 @@ export const env = {
       forcePathStyle: bool(process.env.S3_FORCE_PATH_STYLE, false)
     }
   },
+  webAppUrl: (process.env.WEB_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://www.clinia.win' : 'http://localhost:8081')).replace(/\/$/, ''),
+  mail: {
+    driver: (process.env.MAIL_DRIVER || (process.env.NODE_ENV === 'production' ? 'disabled' : 'log')).toLowerCase(),
+    from: process.env.MAIL_FROM || '',
+    apiKey: (process.env.MAIL_API_KEY || '').trim(),
+    endpoint: process.env.MAIL_API_URL || 'https://api.resend.com/emails'
+  },
+  security: {
+    maxFailedLogins: number(process.env.MAX_FAILED_LOGINS, 5),
+    lockoutMinutes: number(process.env.LOGIN_LOCKOUT_MINUTES, 15),
+    passwordResetMinutes: number(process.env.PASSWORD_RESET_MINUTES, 30)
+  },
   ai: {
     apiKey: (process.env.DEEPSEEK_API_KEY || '').trim(),
     baseUrl: (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
@@ -66,6 +78,10 @@ export const env = {
 
 if (!['disabled', 'preferred', 'required', 'verify_identity'].includes(env.db.sslMode)) {
   throw new Error('DB_SSL_MODE debe ser disabled, preferred, required o verify_identity.');
+}
+
+if (!['log', 'resend', 'disabled'].includes(env.mail.driver)) {
+  throw new Error('MAIL_DRIVER debe ser log, resend o disabled.');
 }
 
 if (!['database', 'local', 's3'].includes(env.storage.driver)) {

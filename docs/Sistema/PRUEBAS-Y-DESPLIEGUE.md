@@ -19,7 +19,7 @@ Las migraciones usan sintaxis de MySQL 8.0: InnoDB, JSON, índices descendentes 
 - `backend/.env`: servidor local, CORS de desarrollo y credenciales MySQL.
 - `backend/.env.production`: servidor publicado, dominios HTTPS y las mismas credenciales MySQL.
 - `frontend/.env`: `EXPO_PUBLIC_API_URL=` activa detección de la API local.
-- Los archivos de entorno son privados y están excluidos de Git. No hay archivos de ejemplo.
+- Los archivos de entorno son privados y están excluidos de Git. `backend/.env.example` y `frontend/.env.example` documentan todas las variables sin credenciales reales.
 - `SEED_DEMO=false` en ambos entornos; no se crean cuentas ni registros ficticios.
 - La IA usa `AI_MOCK_MODE=false`: configura `DEEPSEEK_API_KEY` en el backend para habilitar el proveedor real. Los pagos siguen siendo simulados. Consulta [Configuración de IA](IA.md).
 
@@ -263,3 +263,53 @@ npm.cmd run check:native
 Verificado el 18 de septiembre de 2026: 59 pruebas locales de backend, integración de IA con MySQL (8 resultados, incluido el grupo), 15 pruebas de frontend, TypeScript y exportación web. La integración incluye los beneficios inmediatos al subir de plan y la conservación del consumo al volver a Gratis. La comprobación de IA en Edge pasó con datos ficticios en 320, 390 y 1440 px. La base remota tiene las migraciones 001 a 008 aplicadas. Los bundles Android/iOS se verificaron antes del ajuste de suscripciones. La prueba anterior de sincronización local de Web Deploy confirmó que actualiza código, añade `.env` en el primer despliegue y conserva el `.env` existente, documentos y archivos adicionales. La publicación real queda pendiente del perfil de MonsterASP; la compilación firmada móvil requiere la cuenta de Expo y, para iOS, Apple. La última comprobación de DeepSeek aceptó la autenticación y reportó saldo insuficiente. Consulta [la configuración de IA](IA.md).
 
 Comprobación pública: `https://www.clinia.win` responde HTTP 200; el asset de navegación todavía devuelve 404 hasta que se publique el ZIP web completo. `https://api.clinia.win/health/ready` y el preflight de registro devuelven HTTP 500 desde IIS, antes de que Express pueda aplicar CORS. Eso confirma que la API necesita una nueva publicación y, si persiste, revisar el registro privado de arranque. En la web local se verificó el formulario de acceso contra la API local con la base remota, tanto en tamaño de escritorio como de celular, sin errores JavaScript ni creación de cuentas de prueba.
+
+## 8. Respaldo y restauración (RNF-15)
+
+Como desarrollo y producción comparten la base remota, **haz un respaldo antes de aplicar migraciones**, incluida `009_authorizations_recovery_links.sql`, que añade las autorizaciones, la recuperación de acceso, los vínculos entre registros y el hash de los documentos.
+
+Desde `backend`:
+
+```powershell
+npm.cmd run db:backup
+```
+
+El comando crea en `backend/backups/` (excluido de Git) estos archivos:
+
+- `clinia-<base>-<fecha>.sql`: estructura y datos, incluidos los documentos almacenados en la base.
+- `.sha256`: suma de integridad del respaldo.
+- `.json`: número de filas por tabla, para comparar después de una restauración.
+
+Guarda el respaldo fuera del servidor, por ejemplo en un disco cifrado o en un almacenamiento privado. Contiene datos de salud.
+
+### Restaurar en un entorno de prueba aislado (PI-08)
+
+1. Crea una base local vacía con un nombre terminado en `_test` y apunta a ella un `.env` de prueba:
+
+   ```powershell
+   $env:DOTENV_CONFIG_PATH = 'C:\ruta\privada\restauracion.env'
+   npm.cmd run db:create
+   npm.cmd run db:restore -- --file=backups/<archivo>.sql --confirm=<NOMBRE_DE_LA_BASE>
+   Remove-Item Env:DOTENV_CONFIG_PATH
+   ```
+
+2. Compara el número de filas por tabla con el `.json` del respaldo.
+
+La restauración comprueba la suma SHA-256, exige escribir el nombre de la base de destino y rechaza una base remota si no se añade `--allow-remote`. Restaurar reemplaza todas las tablas del destino.
+
+### Pruebas de integración de requisitos
+
+`tests/requirements.integration.test.js` ejecuta, contra una base **local** cuyo nombre termina en `_test`, los casos PS-11, PF-19, RF-03, RF-07, CU-06, RF-18, RF-23, RF-25, RF-27 a RF-29 y RF-30. Si la base configurada es remota, el test no se ejecuta.
+
+```powershell
+$env:REQUIREMENTS_DB_TESTS = 'true'; $env:AI_DATABASE_TESTS = 'true'
+$env:DOTENV_CONFIG_PATH = 'C:\ruta\privada\clinia_test.env'
+npm.cmd run test:integration
+```
+
+## 9. Recuperación de acceso por correo
+
+`POST /api/auth/recover` envía un enlace de un solo uso, válido 30 minutos, que abre `WEB_APP_URL/?restablecer=…`. En la app del celular se puede pegar el código desde «Tengo un código».
+
+- Desarrollo: con `MAIL_DRIVER=log`, el mensaje aparece en la consola del backend.
+- Producción: configura `MAIL_DRIVER=resend`, `MAIL_API_KEY` y un remitente verificado en `MAIL_FROM`. Sin proveedor, la solicitud responde igual, para no revelar si la cuenta existe, pero no se envía ningún correo.

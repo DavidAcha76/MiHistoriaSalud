@@ -7,6 +7,8 @@ import { apiRequest } from '../api/client';
 import { AppTitle, Card, EmptyState, FormError, Grid, IconBadge, LoadingState, Muted, Pill, PrimaryButton, Screen, SecondaryButton } from '../components/ui';
 import { useLayout } from '../hooks/useLayout';
 import { ProfileSelector } from '../components/ProfileSelector';
+import { RecordPickerModal } from '../components/RecordPickerModal';
+import { useFeedback } from '../context/FeedbackContext';
 import { useProfiles } from '../context/ProfileContext';
 import type { ClinicalDocument } from '../types/domain';
 import { colors } from '../theme/colors';
@@ -16,8 +18,10 @@ const size = (n = 0) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).to
 const safeName = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120) || 'documento';
 
 export function DocumentsScreen({ navigation }: any) {
-  const { selectedProfile } = useProfiles();
+  const { selectedProfile, canEdit } = useProfiles();
   const { twoColumns } = useLayout();
+  const notify = useFeedback();
+  const [linking, setLinking] = useState<ClinicalDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [docs, setDocs] = useState<ClinicalDocument[]>([]);
@@ -45,6 +49,18 @@ export function DocumentsScreen({ navigation }: any) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  // RF-18: vincula el documento con un registro del historial o retira el vínculo.
+  const linkTo = async (doc: ClinicalDocument, eventId: string | null) => {
+    if (!selectedProfile) return;
+    setBusyId(doc.id);
+    try {
+      await apiRequest(`/profiles/${selectedProfile.id}/documents/${doc.id}`, { method: 'PATCH', body: JSON.stringify({ eventId }) });
+      notify(eventId ? 'Documento vinculado al registro.' : 'Vínculo retirado.');
+      load();
+    } catch (e: any) { Alert.alert('Documento', e.message || 'No se pudo actualizar el vínculo.'); }
+    finally { setBusyId(null); }
   };
 
   const deleteDocument = (doc: ClinicalDocument) => {
@@ -75,7 +91,7 @@ export function DocumentsScreen({ navigation }: any) {
   return <Screen>
     <AppTitle eyebrow="Archivos de salud" title="Mis documentos" subtitle="Guarda y encuentra tus recetas, resultados de exámenes y otros archivos de salud." />
     <ProfileSelector />
-    <View style={twoColumns ? styles.uploadWide : undefined}><PrimaryButton title="+ Subir documento" onPress={() => navigation.navigate('DocumentUpload')} disabled={!selectedProfile} /></View>
+    {canEdit ? <View style={twoColumns ? styles.uploadWide : undefined}><PrimaryButton title="+ Subir documento" onPress={() => navigation.navigate('DocumentUpload')} disabled={!selectedProfile} /></View> : <Muted>Tu permiso sobre este perfil es solo de consulta: puedes abrir los documentos, pero no cargarlos ni eliminarlos.</Muted>}
     <FormError message={error} />
     {error ? <SecondaryButton title="Volver a intentar" icon="refresh" onPress={load} /> : null}
     {loading ? <LoadingState label="Buscando tus documentos…" /> : null}
@@ -90,14 +106,17 @@ export function DocumentsScreen({ navigation }: any) {
             <Muted>{mime} · {size(d.sizeBytes || d.size_bytes)}</Muted>
           </View>
         </View>
-        {d.eventId || d.event_id ? <Pill label="Vinculado a un evento del historial." icon="link-variant" tone="accent" /> : null}
+        {d.eventId || d.event_id ? <Pill label={d.eventTitle ? `Vinculado a: ${d.eventTitle}` : 'Vinculado a un evento del historial.'} icon="link-variant" tone="accent" /> : null}
         <View style={styles.actions}>
           <View style={styles.action}><PrimaryButton title={busyId === d.id ? 'Procesando…' : Platform.OS === 'web' ? 'Abrir / descargar' : 'Abrir / compartir'} icon={Platform.OS === 'web' ? 'download-outline' : 'share-variant-outline'} disabled={busyId === d.id} onPress={() => openDocument(d)} /></View>
-          <View style={styles.action}><SecondaryButton title="Eliminar documento" icon="trash-can-outline" danger disabled={busyId === d.id} onPress={() => deleteDocument(d)} /></View>
+          {canEdit ? <View style={styles.action}><SecondaryButton title={d.eventId || d.event_id ? 'Cambiar registro vinculado' : 'Vincular a un registro'} icon="link-variant-plus" disabled={busyId === d.id} onPress={() => setLinking(d)} /></View> : null}
+          {canEdit && (d.eventId || d.event_id) ? <View style={styles.action}><SecondaryButton title="Quitar vínculo" icon="link-variant-off" disabled={busyId === d.id} onPress={() => { void linkTo(d, null); }} /></View> : null}
+          {canEdit ? <View style={styles.action}><SecondaryButton title="Eliminar documento" icon="trash-can-outline" danger disabled={busyId === d.id} onPress={() => deleteDocument(d)} /></View> : null}
         </View>
       </Card>;
     })}</Grid>
     {!loading && !error && selectedProfile && !docs.length ? <EmptyState icon="file-upload-outline" tone="accent" text="Aún no guardaste documentos. Usa «Subir documento» para añadir una receta o un resultado." /> : null}
+    {selectedProfile ? <RecordPickerModal visible={Boolean(linking)} profileId={selectedProfile.id} title="Vincular a un registro" hint={linking ? `Elige el registro de salud al que corresponde «${linking.originalName || linking.original_name}».` : ''} excludeIds={linking?.eventId ? [linking.eventId] : []} onClose={() => setLinking(null)} onSelect={(record) => { const doc = linking; setLinking(null); if (doc) void linkTo(doc, record.id); }} /> : null}
   </Screen>;
 }
 

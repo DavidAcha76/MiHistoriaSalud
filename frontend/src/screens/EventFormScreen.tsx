@@ -175,6 +175,12 @@ export function EventFormScreen({ navigation, route }: any) {
     if (!selectedProfile) return setError('Selecciona la persona a la que corresponde este registro.');
     if (title.trim().length < 2) return setError('Escribe qué quieres recordar. Por ejemplo: Dolor de cabeza.');
     if (!eventDate) return setError('Elige la fecha del registro.');
+    // CU-06: los campos numéricos se validan antes de enviar; el servidor vuelve a comprobarlos.
+    if (details.value_numeric?.trim() && !Number.isFinite(Number(details.value_numeric.replace(',', '.')))) return setError('El «Valor numérico» solo admite números. Escribe otros resultados en «Valor textual».');
+    if (details.intensity?.trim() && !/^(10|[0-9])$/.test(details.intensity.trim())) return setError('La intensidad debe ser un número entero del 0 al 10.');
+    for (const [start, end] of [['start_date', 'end_date'], ['onset_date', 'resolved_date']]) {
+      if (details[start] && details[end] && details[end] < details[start]) return setError('La fecha de fin no puede ser anterior a la fecha de inicio.');
+    }
     const detailsToSave = eventType === 'SYMPTOM' ? { ...details, symptom_name: details.symptom_name?.trim() || title.trim(), status: details.status || 'UNKNOWN' } : details;
     setError('');
     setLoading(true);

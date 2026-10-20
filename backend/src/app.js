@@ -16,6 +16,8 @@ import { notificationRouter } from './routes/notification-routes.js';
 import { shareRouter } from './routes/share-routes.js';
 import { publicShareRouter } from './routes/public-share-routes.js';
 import { medicationRouter } from './routes/medication-routes.js';
+import { authorizationRouter } from './routes/authorization-routes.js';
+import { auditRouter } from './routes/audit-routes.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 import { log, logError } from './utils/logger.js';
 
@@ -44,10 +46,14 @@ const limited = (kind, limit, options = {}) => rateLimit({
   }
 });
 const authLimiter = limited('auth', 80);
-const aiLimiter = limited('ai', 40, {
-  skip: (req) => req.method !== 'POST' || !/^\/profiles\/[^/]+\/ai\/(analyze|chat)\/?$/.test(req.path)
+// PS-11: límite por IP que complementa el bloqueo temporal por cuenta.
+const credentialLimiter = limited('credentials', 20, {
+  skip: (req) => req.method !== 'POST' || !/^\/(login|recover|reset)\/?$/.test(req.path)
 });
-app.use('/api/auth', authLimiter, authRouter);
+const aiLimiter = limited('ai', 40, {
+  skip: (req) => req.method !== 'POST' || !/^\/profiles\/[^/]+\/ai\/(analyze|review|chat)\/?$/.test(req.path)
+});
+app.use('/api/auth', authLimiter, credentialLimiter, authRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'Clinicsoft API', time: new Date().toISOString() }));
 app.get('/health/ready', async (_req, res) => {
@@ -69,6 +75,8 @@ app.use('/api/billing', billingRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api', medicationRouter);
 app.use('/api', shareRouter);
+app.use('/api', authorizationRouter);
+app.use('/api', auditRouter);
 app.use('/api', aiLimiter, aiRouter);
 app.use(notFound);
 app.use(errorHandler);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
@@ -27,6 +27,11 @@ import { ShareScreen } from '../screens/ShareScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { MedicationScheduleScreen } from '../screens/MedicationScheduleScreen';
 import { MedicationFormScreen } from '../screens/MedicationFormScreen';
+import { AuthorizationsScreen } from '../screens/AuthorizationsScreen';
+import { AuditScreen } from '../screens/AuditScreen';
+import { RecoverPasswordScreen } from '../screens/RecoverPasswordScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
+import { takeResetToken } from '../utils/resetLink';
 import { AppTabBar } from '../components/AppTabBar';
 import { BrandLogo } from '../components/BrandLogo';
 import { InTabsContext, useLayout } from '../hooks/useLayout';
@@ -62,8 +67,10 @@ function MainTabs() {
 
 export function AppNavigator() {
   const { user, loading } = useAuth();
+  // RF-03: un enlace de recuperación abre directamente la pantalla para crear la contraseña nueva.
+  const [resetToken] = useState(() => takeResetToken());
   if (loading) return <View accessibilityRole="progressbar" accessibilityLabel="Abriendo Clinia" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28, backgroundColor: colors.background }}><BrandLogo size={72} /><ActivityIndicator size="large" color={colors.primary} /></View>;
-  return <NavigationContainer theme={navigationTheme}><Stack.Navigator screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.backgroundDeep }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
+  return <NavigationContainer theme={navigationTheme}><Stack.Navigator initialRouteName={!user && resetToken ? 'ResetPassword' : undefined} screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.backgroundDeep }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
     {user ? <>
       <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
       <Stack.Screen name="EventForm" component={EventFormScreen} options={{ title: 'Registrar evento' }} />
@@ -78,9 +85,13 @@ export function AppNavigator() {
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Avisos' }} />
       <Stack.Screen name="MedicationSchedule" component={MedicationScheduleScreen} options={{ title: 'Medicamentos y tomas' }} />
       <Stack.Screen name="MedicationForm" component={MedicationFormScreen} options={{ title: 'Registrar medicamento' }} />
+      <Stack.Screen name="Authorizations" component={AuthorizationsScreen} options={{ title: 'Personas autorizadas' }} />
+      <Stack.Screen name="Audit" component={AuditScreen} options={{ title: 'Actividad y trazabilidad' }} />
     </> : <>
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Crear cuenta' }} />
+      <Stack.Screen name="RecoverPassword" component={RecoverPasswordScreen} options={{ title: 'Recuperar acceso' }} />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} initialParams={resetToken ? { token: resetToken } : undefined} options={{ title: 'Nueva contraseña' }} />
     </>}
   </Stack.Navigator></NavigationContainer>;
 }

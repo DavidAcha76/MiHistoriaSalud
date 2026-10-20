@@ -7,7 +7,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { HttpError } from '../utils/http-error.js';
 import { randomId } from '../utils/security.js';
 import { audit } from '../services/audit-service.js';
-import { analyzeSelectedEvents, answerOrganizerChat, hashAiInput, selectedEventVersions, AI_PROMPT_VERSION } from '../services/ai-service.js';
+import { analyzeSelectedEvents, answerOrganizerChat, hashAiInput, selectedEventVersions, AI_PROMPT_VERSION, REVIEW_FOCUS } from '../services/ai-service.js';
 import { loadSelectedMedicalRecords } from '../services/ai-context-service.js';
 import { getEventsWithDetails } from '../services/event-service.js';
 import { getPlanStatus, setAiConsent, withAiQuota } from '../services/plan-service.js';
@@ -17,7 +17,8 @@ aiRouter.use(requireAuth);
 
 const analysisSchema = z.object({
   eventIds: z.array(z.string().uuid()).min(1).max(50),
-  purpose: z.string().trim().min(3).max(300).optional().default('Revisión informativa de registros seleccionados')
+  purpose: z.string().trim().min(3).max(300).optional().default('Revisión informativa de registros seleccionados'),
+  focus: z.enum(REVIEW_FOCUS).optional().default('COMPLETE')
 });
 const consentSchema = z.object({ granted: z.boolean() });
 const chatSchema = z.object({
@@ -32,15 +33,16 @@ aiRouter.get('/profiles/:profileId/ai/status', asyncHandler(async (req, res) => 
 }));
 
 aiRouter.put('/profiles/:profileId/ai/consent', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { owner: true });
   const { granted } = consentSchema.parse(req.body);
   const consent = await setAiConsent({ profileId: req.params.profileId, userId: req.auth.userId, granted });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: granted ? 'AI_CONSENT_GRANTED' : 'AI_CONSENT_REVOKED', resourceType: 'AI_CONSENT', resourceId: req.params.profileId, ip: req.ip });
   res.json(consent);
 }));
 
-aiRouter.post('/profiles/:profileId/ai/analyze', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+// CU-11: se verifica cada ID seleccionado, se envía solo ese contexto y se guarda la trazabilidad.
+const requestAnalysis = asyncHandler(async (req, res) => {
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = analysisSchema.parse(req.body);
   const payload = await withAiQuota({ userId: req.auth.userId, profileId: req.params.profileId, usageType: 'ANALYSIS' }, async ({ connection: db, plan }) => {
     const events = await getEventsWithDetails(req.params.profileId, body.eventIds, db);
@@ -49,26 +51,29 @@ aiRouter.post('/profiles/:profileId/ai/analyze', asyncHandler(async (req, res) =
     const analysisId = randomId();
     const inputHash = hashAiInput(events);
     await db.execute(
-      `INSERT INTO ai_analyses (id, profile_id, requested_by_user_id, purpose, mode, selected_event_ids, selected_event_versions, input_snapshot_hash, provider, model, status)
-       VALUES (?, ?, ?, ?, 'MANUAL', ?, ?, ?, 'pending', 'pending', 'PROCESSING')`,
-      [analysisId, req.params.profileId, req.auth.userId, body.purpose, JSON.stringify(body.eventIds), JSON.stringify(selectedEventVersions(events)), inputHash]
+      `INSERT INTO ai_analyses (id, profile_id, requested_by_user_id, purpose, mode, review_focus, selected_event_ids, selected_event_versions, input_snapshot_hash, provider, model, status)
+       VALUES (?, ?, ?, ?, 'MANUAL', ?, ?, ?, ?, 'pending', 'pending', 'PROCESSING')`,
+      [analysisId, req.params.profileId, req.auth.userId, body.purpose, body.focus, JSON.stringify(body.eventIds), JSON.stringify(selectedEventVersions(events)), inputHash]
     );
 
     try {
-      const result = await analyzeSelectedEvents(events, body.purpose);
+      const result = await analyzeSelectedEvents(events, body.purpose, body.focus);
       await db.execute(
         `UPDATE ai_analyses SET provider=?, model=?, status='COMPLETED', output_json=?, safety_flags=? WHERE id=?`,
         [result.provider, result.model, JSON.stringify(result.output), JSON.stringify([]), analysisId]
       );
-      return { value: { id: analysisId, provider: result.provider, model: result.model, createdAt: new Date().toISOString(), plan: plan.code, ...result.output }, metadata: { analysisId, mode: 'MANUAL', selectedCount: events.length, promptVersion: AI_PROMPT_VERSION } };
+      return { value: { id: analysisId, provider: result.provider, model: result.model, createdAt: new Date().toISOString(), purpose: body.purpose, focus: body.focus, selectedCount: events.length, plan: plan.code, ...result.output }, metadata: { analysisId, mode: 'MANUAL', focus: body.focus, selectedCount: events.length, promptVersion: AI_PROMPT_VERSION } };
     } catch (error) {
       await db.execute(`UPDATE ai_analyses SET status='REJECTED', output_json=NULL, safety_flags=? WHERE id=?`, [JSON.stringify(error.details?.flags || [error.message]), analysisId]);
       return { failure: error };
     }
   });
-  await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'ANALYZE', resourceType: 'AI_ANALYSIS', resourceId: payload.id, metadata: { provider: payload.provider }, ip: req.ip });
+  await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'ANALYZE', resourceType: 'AI_ANALYSIS', resourceId: payload.id, metadata: { provider: payload.provider, focus: payload.focus, selectedCount: payload.selectedCount }, ip: req.ip });
   res.status(201).json(payload);
-}));
+});
+aiRouter.post('/profiles/:profileId/ai/analyze', requestAnalysis);
+// Nombre documentado en la Tabla 3.20 del proyecto; mismo comportamiento que /ai/analyze.
+aiRouter.post('/profiles/:profileId/ai/review', requestAnalysis);
 
 aiRouter.get('/profiles/:profileId/ai/chat/latest', asyncHandler(async (req, res) => {
   await assertProfileAccess(req.auth.userId, req.params.profileId);
@@ -88,7 +93,7 @@ aiRouter.get('/profiles/:profileId/ai/chat/latest', asyncHandler(async (req, res
 }));
 
 aiRouter.post('/profiles/:profileId/ai/chat', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = chatSchema.parse(req.body);
   const payload = await withAiQuota({ userId: req.auth.userId, profileId: req.params.profileId, usageType: 'CHAT' }, async ({ connection: db, remaining }) => {
     const { events, medications } = await loadSelectedMedicalRecords(req.params.profileId, body.eventIds, body.medicationIds, db);
@@ -128,9 +133,28 @@ aiRouter.post('/profiles/:profileId/ai/chat', asyncHandler(async (req, res) => {
 aiRouter.get('/profiles/:profileId/ai/analyses', asyncHandler(async (req, res) => {
   await assertProfileAccess(req.auth.userId, req.params.profileId);
   const [rows] = await db.execute(
-    `SELECT id, purpose, mode, provider, model, status, output_json AS output, created_at AS createdAt
+    `SELECT id, purpose, mode, review_focus AS focus, provider, model, status, output_json AS output, selected_event_ids AS selectedEventIds, created_at AS createdAt
        FROM ai_analyses WHERE profile_id=? ORDER BY created_at DESC LIMIT 20`,
     [req.params.profileId]
   );
-  res.json(rows.map((row) => ({ ...row, output: typeof row.output === 'string' ? JSON.parse(row.output) : row.output })));
+  const parse = (value) => (typeof value === 'string' ? JSON.parse(value) : value);
+  // IA-07: cada resultado se relaciona con el conjunto exacto de registros autorizados para esa solicitud.
+  const ids = [...new Set(rows.flatMap((row) => parse(row.selectedEventIds) || []))];
+  const titles = new Map();
+  if (ids.length) {
+    const [events] = await db.execute(
+      `SELECT id, title, event_date AS eventDate FROM health_events WHERE profile_id=? AND id IN (${ids.map(() => '?').join(',')})`,
+      [req.params.profileId, ...ids]
+    );
+    for (const event of events) titles.set(event.id, event);
+  }
+  res.json(rows.map(({ selectedEventIds, ...row }) => {
+    const selected = parse(selectedEventIds) || [];
+    return {
+      ...row,
+      output: parse(row.output),
+      selectedCount: selected.length,
+      selectedEvents: selected.map((id) => titles.get(id) || { id, title: 'Registro eliminado después del análisis', eventDate: null })
+    };
+  }));
 }));

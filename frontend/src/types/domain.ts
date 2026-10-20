@@ -7,7 +7,13 @@ export type HealthProfile = {
   birth_date?: string | null;
   relationship: 'SELF' | 'CHILD' | 'PARENT' | 'OTHER';
   notes?: string | null;
+  /** Permiso de esta cuenta: titular, representante autorizado o solo consulta (RF-07). */
+  accessRole?: AccessRole;
+  ownerName?: string | null;
 };
+export type AccessRole = 'OWNER' | 'REPRESENTATIVE' | 'VIEWER';
+export type ProfileAuthorization = { id: string; userId: string; email: string; fullName: string; role: Exclude<AccessRole, 'OWNER'>; status: 'ACTIVE' | 'REVOKED'; createdAt: string; revokedAt?: string | null };
+export type LinkedEvent = { id: string; title: string; eventType: EventType; eventDate: string };
 export type EventType = 'ANTECEDENT' | 'CONSULTATION' | 'DIAGNOSIS' | 'TREATMENT' | 'MEDICATION' | 'ALLERGY' | 'VACCINE' | 'SURGERY' | 'LAB_RESULT' | 'SYMPTOM' | 'OTHER';
 export type HealthEvent = {
   id: string;
@@ -23,6 +29,7 @@ export type HealthEvent = {
   notes?: string | null;
   details?: Record<string, unknown> | null;
   documents?: ClinicalDocument[];
+  linkedEvents?: LinkedEvent[];
 };
 export type ClinicalDocument = {
   id: string;
@@ -36,6 +43,8 @@ export type ClinicalDocument = {
   size_bytes?: number;
   createdAt?: string;
   created_at?: string;
+  eventTitle?: string | null;
+  sha256?: string | null;
 };
 export type PagedEvents = { items: HealthEvent[]; page: number; pageSize: number; total: number; totalPages: number };
 export type AiResult = {
@@ -47,7 +56,14 @@ export type AiResult = {
   contradictions: string[];
   questions: string[];
   disclaimer: string;
+  createdAt?: string;
+  purpose?: string;
+  focus?: ReviewFocus;
+  selectedCount?: number;
 };
+export type ReviewFocus = 'COMPLETE' | 'SUMMARY' | 'CONSISTENCY';
+export type AuditEntry = { id: string; action: string; resourceType: string; resourceId?: string | null; createdAt: string; actorName?: string | null; actorIsYou: boolean; details?: Record<string, unknown> | null };
+export type PagedAudit = { items: AuditEntry[]; page: number; pageSize: number; total: number; totalPages: number };
 export type SymptomRecurrence = { symptomName: string; occurrences: number; firstRecordedAt: string; lastRecordedAt: string; activeOccurrences: number };
 export type MedicationDoseSlot = { scheduledDate: string; scheduledTime: string };
 export type MedicationAdherence = { confirmed: number; total: number; missed: number; percentage: number; pending: MedicationDoseSlot[] };
@@ -92,4 +108,4 @@ export type PlanStatus = {
   chat: { usedThisWeek: number; limit: number | null; resetsAt: string };
   analysis: { everyDays: number | null; limit?: number | null; usedThisWeek?: number | null; resetsAt?: string | null; lastAnalysisAt: string | null; nextAnalysisAt: string | null; availableNow: boolean };
 };
-export type AnalysisHistory = { id: string; purpose: string; mode: 'MANUAL' | 'SCHEDULED'; status: 'PROCESSING' | 'COMPLETED' | 'REJECTED'; createdAt: string; output?: AiResult | null };
+export type AnalysisHistory = { id: string; purpose: string; mode: 'MANUAL' | 'SCHEDULED'; focus?: ReviewFocus | null; status: 'PROCESSING' | 'COMPLETED' | 'REJECTED'; createdAt: string; output?: AiResult | null; selectedCount?: number; selectedEvents?: Array<{ id: string; title: string; eventDate: string | null }> };

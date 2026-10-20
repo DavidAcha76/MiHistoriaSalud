@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AppTitle, Card, Field, FormError, IconBadge, Muted, Pill, PrimaryButton, Screen, SecondaryButton } from '../components/ui';
@@ -38,6 +38,9 @@ export function LoginScreen({ navigation }: any) {
     <Text accessibilityRole="header" style={styles.formTitle}>Entra a tu cuenta</Text><Text style={styles.formHint}>Escribe los datos con los que te registraste.</Text>
     <Field label="Correo electrónico" icon="email-outline" autoComplete="email" textContentType="emailAddress" autoCorrect={false} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={(value) => { setEmail(value); setError(''); }} placeholder="nombre@correo.com" editable={!loading} />
     <Field label="Contraseña" icon="lock-outline" autoComplete="current-password" textContentType="password" secureTextEntry value={password} onChangeText={(value) => { setPassword(value); setError(''); }} placeholder="Escribe tu contraseña" returnKeyType="go" onSubmitEditing={() => { void submit(); }} editable={!loading} />
+    <Pressable accessibilityRole="button" accessibilityLabel="¿Olvidaste tu contraseña?" onPress={() => navigation.navigate('RecoverPassword')} disabled={loading} style={styles.forgot}>
+      <MaterialCommunityIcons name="lock-reset" size={20} color={colors.primary} /><Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
+    </Pressable>
     <FormError message={error} />
     <PrimaryButton title="Entrar a mi cuenta" icon="login" onPress={submit} loading={loading} />
     <View style={styles.dividerRow}><View style={styles.divider} /><Text style={styles.newAccount}>¿Es tu primera vez aquí?</Text><View style={styles.divider} /></View>
@@ -96,6 +99,8 @@ const styles = StyleSheet.create({
   formCardWide: { padding: 32, marginBottom: 0 },
   formTitle: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 35, letterSpacing: -0.4, color: colors.text, marginBottom: 6 },
   formHint: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 25, color: colors.muted, marginBottom: 26 },
+  forgot: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-end', marginTop: -8, marginBottom: 6 },
+  forgotText: { fontFamily: fonts.semibold, fontSize: 16, color: colors.primary },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 18, marginBottom: 8 },
   divider: { flex: 1, height: 1, backgroundColor: colors.borderSoft },
   newAccount: { flexShrink: 1, fontFamily: fonts.regular, color: colors.muted, fontSize: 16, textAlign: 'center' },

@@ -28,7 +28,7 @@ medicationRouter.get('/profiles/:profileId/medication-regimens', asyncHandler(as
 }));
 
 medicationRouter.post('/profiles/:profileId/medication-regimens', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = regimenSchema.parse(req.body);
   const regimen = await createMedicationRegimen({ profileId: req.params.profileId, userId: req.auth.userId, body });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'CREATE', resourceType: 'MEDICATION_REGIMEN', resourceId: regimen.id, metadata: { medicationName: regimen.medicationName }, ip: req.ip });
@@ -36,7 +36,7 @@ medicationRouter.post('/profiles/:profileId/medication-regimens', asyncHandler(a
 }));
 
 medicationRouter.post('/profiles/:profileId/medication-regimens/:regimenId/confirm', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const body = confirmationSchema.parse(req.body);
   const dose = await confirmMedicationDose({ profileId: req.params.profileId, regimenId: req.params.regimenId, ...body });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: 'CONFIRM', resourceType: 'MEDICATION_DOSE', resourceId: req.params.regimenId, metadata: { scheduledDate: body.scheduledDate, scheduledTime: body.scheduledTime }, ip: req.ip });
@@ -44,7 +44,7 @@ medicationRouter.post('/profiles/:profileId/medication-regimens/:regimenId/confi
 }));
 
 medicationRouter.patch('/profiles/:profileId/medication-regimens/:regimenId', asyncHandler(async (req, res) => {
-  await assertProfileAccess(req.auth.userId, req.params.profileId);
+  await assertProfileAccess(req.auth.userId, req.params.profileId, { write: true });
   const { isActive } = activeSchema.parse(req.body);
   const regimen = await setMedicationRegimenActive({ profileId: req.params.profileId, regimenId: req.params.regimenId, isActive });
   await audit({ userId: req.auth.userId, profileId: req.params.profileId, action: isActive ? 'RESUME' : 'PAUSE', resourceType: 'MEDICATION_REGIMEN', resourceId: regimen.id, ip: req.ip });

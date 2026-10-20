@@ -8,7 +8,8 @@ import { apiRequest } from '../api/client';
 import { useProfileResource } from '../hooks/useProfileResource';
 import type { AnalysisHistory } from '../types/domain';
 import { aiDate } from '../utils/ai-access';
-import { fonts } from '../theme/colors';
+import { focusLabels, readableDate } from '../utils/presentation';
+import { colors, fonts } from '../theme/colors';
 
 const fetchHistory = (id: string) => apiRequest<AnalysisHistory[]>(`/profiles/${id}/ai/analyses`);
 const labels = { COMPLETED: 'Completada', PROCESSING: 'En curso', REJECTED: 'No completada' };
@@ -35,8 +36,13 @@ export function AIHistoryScreen({ navigation }: any) {
         <View style={styles.pills}>
           <Pill label={labels[analysis.status]} tone={tone} />
           <Pill label={analysis.mode === 'SCHEDULED' ? 'Revisión automática antigua' : 'Revisión solicitada'} tone="neutral" />
+          {analysis.focus ? <Pill label={focusLabels[analysis.focus] || analysis.focus} tone="ai" /> : null}
         </View>
-        {analysis.output ? <Disclosure title="Ver revisión completa"><AiResultCard result={analysis.output} /></Disclosure> : <Muted>{analysis.status === 'PROCESSING' ? 'La revisión está en curso.' : 'No hay un resultado disponible para este intento.'}</Muted>}
+        {analysis.selectedEvents?.length ? <Disclosure title={`Registros incluidos (${analysis.selectedEvents.length})`}>
+          {analysis.selectedEvents.map((event) => <View key={event.id} style={styles.included}><View style={styles.dot} /><View style={{ flex: 1 }}><Text style={{ fontFamily: fonts.semibold }}>{event.title}</Text>{event.eventDate ? <Muted>{readableDate(event.eventDate)}</Muted> : null}</View></View>)}
+          <Muted>Solo estos registros se enviaron al servicio de IA para esta revisión.</Muted>
+        </Disclosure> : null}
+        {analysis.output ? <Disclosure title="Ver revisión completa"><AiResultCard result={{ ...analysis.output, createdAt: analysis.createdAt, purpose: analysis.purpose, focus: analysis.focus || undefined, selectedCount: analysis.selectedCount }} /></Disclosure> : <Muted>{analysis.status === 'PROCESSING' ? 'La revisión está en curso.' : 'No hay un resultado disponible para este intento.'}</Muted>}
       </Card>;
     })}
     {history && !history.length ? <EmptyState icon="creation-outline" tone="ai" text="Aún no tienes revisiones guardadas." /> : null}
@@ -47,5 +53,7 @@ export function AIHistoryScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   heading: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12 },
   purpose: { fontFamily: fonts.bold },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  included: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginBottom: 8 },
+  dot: { width: 7, height: 7, borderRadius: 4, marginTop: 11, backgroundColor: colors.ai }
 });

@@ -21,14 +21,17 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
     health_profiles: 'id CHAR(36) PRIMARY KEY, owner_user_id CHAR(36), display_name VARCHAR(120), birth_date DATE, relationship VARCHAR(20), notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
     health_events: 'id CHAR(36) PRIMARY KEY, profile_id CHAR(36), event_type VARCHAR(30), title VARCHAR(180), description TEXT, source VARCHAR(255), event_date DATE, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
     health_event_versions: 'id BIGINT PRIMARY KEY AUTO_INCREMENT, event_id CHAR(36), version_number INT',
-    ai_analyses: "id CHAR(36) PRIMARY KEY, profile_id CHAR(36), requested_by_user_id CHAR(36), purpose VARCHAR(300), mode VARCHAR(20), selected_event_ids JSON, input_snapshot_hash CHAR(64), provider VARCHAR(80), model VARCHAR(120), status VARCHAR(20), output_json JSON, safety_flags JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    ai_analyses: "id CHAR(36) PRIMARY KEY, profile_id CHAR(36), requested_by_user_id CHAR(36), purpose VARCHAR(300), mode VARCHAR(20), review_focus VARCHAR(20), selected_event_ids JSON, input_snapshot_hash CHAR(64), provider VARCHAR(80), model VARCHAR(120), status VARCHAR(20), output_json JSON, safety_flags JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     ai_messages: 'id CHAR(36) PRIMARY KEY, conversation_id CHAR(36), role VARCHAR(20), content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
     ai_conversations: "id CHAR(36) PRIMARY KEY, profile_id CHAR(36), user_id CHAR(36), title VARCHAR(180) DEFAULT 'Prueba', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     ai_consents: "profile_id CHAR(36) PRIMARY KEY, granted_by_user_id CHAR(36), granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, revoked_at TIMESTAMP NULL, consent_version VARCHAR(40)",
     user_subscriptions: "user_id CHAR(36) PRIMARY KEY, plan_code VARCHAR(20), status VARCHAR(30), provider VARCHAR(30), activated_at DATETIME, updated_at DATETIME, current_period_start DATETIME, current_period_end DATETIME, cancel_at_period_end BOOLEAN DEFAULT FALSE, canceled_at DATETIME",
     ai_usage_ledger: 'id CHAR(36) PRIMARY KEY, user_id CHAR(36), profile_id CHAR(36), plan_code VARCHAR(20), usage_type VARCHAR(20), units INT DEFAULT 1, metadata_json JSON, occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
     in_app_notifications: 'id CHAR(36) PRIMARY KEY, user_id CHAR(36), profile_id CHAR(36), notification_type VARCHAR(50), title VARCHAR(180), body TEXT',
-    audit_logs: 'id BIGINT PRIMARY KEY AUTO_INCREMENT, user_id CHAR(36), profile_id CHAR(36), action VARCHAR(50), resource_type VARCHAR(80), resource_id VARCHAR(80), metadata_json JSON, ip_address VARCHAR(64)'
+    audit_logs: 'id BIGINT PRIMARY KEY AUTO_INCREMENT, user_id CHAR(36), profile_id CHAR(36), action VARCHAR(50), resource_type VARCHAR(80), resource_id VARCHAR(80), metadata_json JSON, ip_address VARCHAR(64), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+    users: 'id CHAR(36) PRIMARY KEY, email VARCHAR(190), password_hash VARCHAR(255), full_name VARCHAR(120), is_active BOOLEAN DEFAULT TRUE',
+    refresh_tokens: 'id CHAR(36) PRIMARY KEY, user_id CHAR(36), token_hash CHAR(64), expires_at DATETIME, revoked_at DATETIME NULL, device_info VARCHAR(255)',
+    profile_authorizations: "id CHAR(36) PRIMARY KEY, profile_id CHAR(36), user_id CHAR(36), role VARCHAR(20), status VARCHAR(20) DEFAULT 'ACTIVE'"
   };
   for (const [table, columns] of Object.entries(schemas)) await conn.query(`CREATE TEMPORARY TABLE ${table} (${columns}) ENGINE=InnoDB`);
   await conn.query(await fs.readFile(new URL('../database/migrations/005_ai_review_versions_and_message_order.sql', import.meta.url), 'utf8'));
@@ -42,7 +45,9 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
     beginTransaction: () => conn.beginTransaction(), commit: () => conn.commit(), rollback: () => conn.rollback(),
     release() {}, destroy: () => conn.destroy()
   }));
-  const userId = randomUUID(), profileId = randomUUID(), secondProfile = randomUUID();
+  const userId = randomUUID(), profileId = randomUUID(), secondProfile = randomUUID(), sessionId = randomUUID();
+  await conn.execute("INSERT INTO users (id, email, password_hash, full_name) VALUES (?, 'qa@example.test', 'x', 'Persona ficticia')", [userId]);
+  await conn.execute("INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, REPEAT('a', 64), DATE_ADD(NOW(), INTERVAL 1 DAY))", [sessionId, userId]);
   for (const id of [profileId, secondProfile]) {
     await conn.execute("INSERT INTO health_profiles (id, owner_user_id, display_name) VALUES (?, ?, 'Perfil ficticio')", [id, userId]);
     await conn.execute("INSERT INTO ai_consents (profile_id, granted_by_user_id, consent_version) VALUES (?, ?, 'test')", [id, userId]);
@@ -66,7 +71,7 @@ test('IA: migración y rutas HTTP sobre tablas temporales de MySQL/MariaDB', { s
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
   const base = `http://127.0.0.1:${server.address().port}/api/profiles`;
-  const headers = { Authorization: `Bearer ${createAccessToken({ id: userId, email: 'qa@example.test' })}`, 'Content-Type': 'application/json' };
+  const headers = { Authorization: `Bearer ${createAccessToken({ id: userId, email: 'qa@example.test' }, sessionId)}`, 'Content-Type': 'application/json' };
   const request = (route, body, method = 'POST') => fetch(`${base}/${profileId}/ai/${route}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
 
   await t.test('el análisis manual guarda versiones y Gratis comparte el cupo entre perfiles', async () => {

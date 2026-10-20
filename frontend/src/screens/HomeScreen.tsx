@@ -16,7 +16,7 @@ import { useLayout } from '../hooks/useLayout';
 import { eventIcon, eventTone, eventTypeLabel, readableDate, todayLabel } from '../utils/presentation';
 
 export function HomeScreen({ navigation }: any) {
-  const { selectedProfile, loading: profilesLoading } = useProfiles();
+  const { selectedProfile, loading: profilesLoading, canEdit } = useProfiles();
   const { user } = useAuth();
   const { sidebarMode, contentWidth, largeText, twoColumns } = useLayout();
   const [recent, setRecent] = useState<HealthEvent[]>([]);
@@ -41,7 +41,8 @@ export function HomeScreen({ navigation }: any) {
     <View aria-hidden style={styles.heroArt}><MaterialCommunityIcons name="heart-pulse" size={180} color="rgba(121, 221, 202, 0.09)" /></View>
     <View style={styles.welcomeHeading}><IconBadge icon="heart-pulse" size={48} /><Text accessibilityRole="header" style={styles.welcomeTitle}>Lleva tu salud al día</Text></View>
     <Text style={styles.welcomeText}>Guarda una molestia, una consulta o un resultado para recordarlo después.</Text>
-    <View style={twoColumns ? styles.heroActionWide : undefined}><PrimaryButton title="+ Añadir un registro de salud" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile} /></View>
+    <View style={twoColumns ? styles.heroActionWide : undefined}><PrimaryButton title="+ Añadir un registro de salud" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile || !canEdit} /></View>
+    {!canEdit ? <Text style={styles.readOnly}>Tu permiso sobre este perfil es solo de consulta.</Text> : null}
   </Card>;
 
   const quickActions = <>
@@ -95,6 +96,7 @@ const styles = StyleSheet.create({
   welcomeTitle: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 32, letterSpacing: -0.4, color: colors.text, flex: 1 },
   welcomeText: { fontFamily: fonts.regular, fontSize: 17, lineHeight: 27, color: colors.text, marginBottom: 12, maxWidth: 560 },
   heroActionWide: { alignSelf: 'flex-start' },
+  readOnly: { color: colors.muted, fontSize: 16, lineHeight: 24 },
   split: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
   main: { flex: 1.45, minWidth: 0 },
   aside: { flex: 1, minWidth: 0, marginTop: -28 },
