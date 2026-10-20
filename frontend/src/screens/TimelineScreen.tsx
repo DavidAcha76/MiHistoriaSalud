@@ -1,20 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AppText as Text } from '../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, Chip, Disclosure, Field, FormError, LoadingState, Muted, PrimaryButton, Screen, SecondaryButton, SectionTitle } from '../components/ui';
+import { AppTitle, Chip, Disclosure, EmptyState, Field, FormError, Grid, LoadingState, Muted, Pill, PrimaryButton, Screen, SecondaryButton, SectionTitle, type PressState } from '../components/ui';
 import { DateField } from '../components/DateField';
 import { ProfileSelector } from '../components/ProfileSelector';
 import { useProfiles } from '../context/ProfileContext';
+import { useLayout } from '../hooks/useLayout';
 import type { EventType, PagedEvents } from '../types/domain';
-import { colors, fonts } from '../theme/colors';
-import { eventLabels, eventTypeLabel, readableDate } from '../utils/presentation';
+import { colors, fonts, shadows } from '../theme/colors';
+import { shadow } from '../theme/effects';
+import { dateParts, eventIcon, eventLabels, eventTone, eventTypeLabel, readableDate } from '../utils/presentation';
 
 type Filters = { q: string; from: string; to: string; type: '' | EventType };
 const emptyFilters: Filters = { q: '', from: '', to: '', type: '' };
 export function TimelineScreen({ navigation }: any) {
   const { selectedProfile } = useProfiles();
+  const { compact } = useLayout();
   const [data, setData] = useState<PagedEvents | null>(null);
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -38,23 +42,72 @@ export function TimelineScreen({ navigation }: any) {
     setPage(1); setFilters({ ...draft }); setError('');
   }
   const filtered = Object.values(filters).some(Boolean);
+  const items = !loading && !error ? data?.items || [] : [];
   return <Screen>
-    <AppTitle title="Mi historial" subtitle="Encuentra tus registros de salud, del más reciente al más antiguo." />
+    <AppTitle eyebrow="Tu historia de salud" title="Mi historial" subtitle="Encuentra tus registros de salud, del más reciente al más antiguo." />
     <ProfileSelector />
-    <Field label="¿Qué quieres encontrar?" value={draft.q} onChangeText={(q) => setDraft((value) => ({ ...value, q }))} placeholder="Ej.: consulta, dolor de cabeza…" returnKeyType="search" onSubmitEditing={search} />
+    <Field label="¿Qué quieres encontrar?" icon="magnify" value={draft.q} onChangeText={(q) => setDraft((value) => ({ ...value, q }))} placeholder="Ej.: consulta, dolor de cabeza…" returnKeyType="search" onSubmitEditing={search} />
     <Disclosure title="Filtrar por fecha o tipo de registro">
-      <DateField label="Desde la fecha" value={draft.from} onChange={(from) => setDraft((value) => ({ ...value, from }))} clearable />
-      <DateField label="Hasta la fecha" value={draft.to} onChange={(to) => setDraft((value) => ({ ...value, to }))} clearable />
+      <Grid min={260}>
+        <DateField label="Desde la fecha" value={draft.from} onChange={(from) => setDraft((value) => ({ ...value, from }))} clearable />
+        <DateField label="Hasta la fecha" value={draft.to} onChange={(to) => setDraft((value) => ({ ...value, to }))} clearable />
+      </Grid>
       <SectionTitle>Tipo de registro</SectionTitle>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}><Chip label="Todos" selected={!draft.type} onPress={() => setDraft((value) => ({ ...value, type: '' }))} />{(Object.entries(eventLabels) as [EventType, string][]).map(([value, label]) => <Chip key={value} label={label} selected={draft.type === value} onPress={() => setDraft((current) => ({ ...current, type: value }))} />)}</View>
+      <View style={styles.chips}><Chip label="Todos" selected={!draft.type} onPress={() => setDraft((value) => ({ ...value, type: '' }))} />{(Object.entries(eventLabels) as [EventType, string][]).map(([value, label]) => <Chip key={value} label={label} selected={draft.type === value} onPress={() => setDraft((current) => ({ ...current, type: value }))} />)}</View>
     </Disclosure>
-    <PrimaryButton title="Buscar en mi historial" onPress={search} loading={loading} disabled={!selectedProfile} />
-    {filtered ? <SecondaryButton title="Quitar filtros y ver todo" onPress={() => { setDraft(emptyFilters); setFilters(emptyFilters); setPage(1); }} /> : null}
-    <SecondaryButton title="+ Añadir un registro" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile} />
-    <SectionTitle>{filtered ? 'Resultados de tu búsqueda' : 'Tus registros'}</SectionTitle>
-    {loading ? <LoadingState /> : error ? <><FormError message={error} /><SecondaryButton title="Volver a intentar" onPress={() => setReload((value) => value + 1)} /></> : null}
-    {!loading && !error ? data?.items.map((event) => <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${event.title}`} key={event.id} onPress={() => navigation.navigate('EventDetail', { eventId: event.id })}><Card><Text style={{ color: colors.primary, fontSize: 16, lineHeight: 25, fontFamily: fonts.semibold, marginBottom: 6 }}>{readableDate(event.eventDate)}</Text><Text style={{ fontFamily: fonts.bold, fontSize: 20, lineHeight: 30, color: colors.text }}>{event.title}</Text><Muted>{eventTypeLabel(event.eventType)}{event.source ? ` · ${event.source}` : ''}</Muted>{event.description ? <Text numberOfLines={3} style={{ marginTop: 10, fontSize: 17, lineHeight: 27, color: colors.text }}>{event.description}</Text> : null}<Text style={{ marginTop: 12, color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Ver registro →</Text></Card></Pressable>) : null}
-    {!loading && !error && data && !data.items.length ? <Card><Text style={{ fontSize: 19, lineHeight: 28, fontFamily: fonts.bold, color: colors.text, marginBottom: 8 }}>{filtered ? 'No encontramos coincidencias' : 'Tu historial está listo para empezar'}</Text><Muted>{filtered ? 'Prueba con otra palabra o quita los filtros para ver todos los registros.' : 'Añade una consulta, una molestia o un resultado. Lo encontrarás aquí por fecha.'}</Muted></Card> : null}
-    {data && data.totalPages > 1 ? <View><Muted>Página {data.page} de {data.totalPages} · {data.total} registros</Muted><SecondaryButton title="Página anterior" disabled={page <= 1 || loading} onPress={() => setPage((value) => value - 1)} /><SecondaryButton title="Ver siguientes registros" disabled={page >= data.totalPages || loading} onPress={() => setPage((value) => value + 1)} /></View> : null}
+    <Grid min={240} gap={12}>
+      <PrimaryButton title="Buscar en mi historial" icon="magnify" onPress={search} loading={loading} disabled={!selectedProfile} />
+      {filtered ? <SecondaryButton title="Quitar filtros y ver todo" icon="filter-remove-outline" onPress={() => { setDraft(emptyFilters); setFilters(emptyFilters); setPage(1); }} /> : null}
+      <SecondaryButton title="+ Añadir un registro" onPress={() => navigation.navigate('EventForm')} disabled={!selectedProfile} />
+    </Grid>
+    <SectionTitle right={data && !loading && !error ? <Pill label={`${data.total} ${data.total === 1 ? 'registro' : 'registros'}`} tone="accent" icon="timeline-text-outline" /> : null}>{filtered ? 'Resultados de tu búsqueda' : 'Tus registros'}</SectionTitle>
+    {loading ? <LoadingState /> : error ? <><FormError message={error} /><SecondaryButton title="Volver a intentar" icon="refresh" onPress={() => setReload((value) => value + 1)} /></> : null}
+    {items.map((event, index) => {
+      const parts = dateParts(event.eventDate);
+      const type = event.eventType;
+      return <View key={event.id} style={styles.row}>
+        <View style={[styles.rail, compact && styles.railCompact]}>
+          <View style={[styles.dateBox, compact && styles.dateBoxCompact]}><Text style={styles.day}>{parts.day}</Text><Text style={styles.month}>{parts.month}</Text></View>
+          {index < items.length - 1 ? <View style={styles.line} /> : null}
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${event.title}`} onPress={() => navigation.navigate('EventDetail', { eventId: event.id })} style={(state) => {
+          const { pressed, hovered } = state as PressState;
+          return [styles.card, hovered && styles.cardHovered, pressed && { opacity: .85 }];
+        }}>
+          <Pill label={eventTypeLabel(type)} icon={eventIcon(type)} tone={eventTone(type)} />
+          <Text style={styles.title}>{event.title}</Text>
+          <Muted>{readableDate(event.eventDate)}{event.source ? ` · ${event.source}` : ''}</Muted>
+          {event.description ? <Text numberOfLines={3} style={styles.description}>{event.description}</Text> : null}
+          <View style={styles.open}><Text style={styles.openText}>Ver registro</Text><MaterialCommunityIcons name="arrow-right" size={18} color={colors.primary} /></View>
+        </Pressable>
+      </View>;
+    })}
+    {!loading && !error && data && !data.items.length ? <EmptyState icon={filtered ? 'file-search-outline' : 'notebook-plus-outline'} title={filtered ? 'No encontramos coincidencias' : 'Tu historial está listo para empezar'} text={filtered ? 'Prueba con otra palabra o quita los filtros para ver todos los registros.' : 'Añade una consulta, una molestia o un resultado. Lo encontrarás aquí por fecha.'} /> : null}
+    {data && data.totalPages > 1 ? <View style={styles.pagination}>
+      <Muted>Página {data.page} de {data.totalPages} · {data.total} registros</Muted>
+      <Grid min={220} gap={12}>
+        <SecondaryButton title="Página anterior" icon="chevron-left" disabled={page <= 1 || loading} onPress={() => setPage((value) => value - 1)} />
+        <SecondaryButton title="Ver siguientes registros" icon="chevron-right" disabled={page >= data.totalPages || loading} onPress={() => setPage((value) => value + 1)} />
+      </Grid>
+    </View> : null}
   </Screen>;
 }
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap' },
+  row: { flexDirection: 'row', gap: 14 },
+  rail: { width: 64, alignItems: 'center' },
+  railCompact: { width: 54 },
+  dateBox: { width: 64, paddingVertical: 10, alignItems: 'center', borderRadius: 18, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.borderSoft },
+  dateBoxCompact: { width: 54 },
+  day: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28, color: colors.text },
+  month: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 19, color: colors.primary, letterSpacing: 0.6 },
+  line: { flex: 1, width: 2, marginVertical: 6, borderRadius: 2, backgroundColor: colors.borderSoft },
+  card: { flex: 1, minWidth: 0, gap: 6, padding: 18, marginBottom: 16, borderRadius: 22, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.surface, ...shadow(shadows.card) },
+  cardHovered: { borderColor: colors.border, backgroundColor: colors.surfaceHover },
+  title: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 29, color: colors.text, marginTop: 6 },
+  description: { marginTop: 4, fontSize: 17, lineHeight: 27, color: colors.text },
+  open: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  openText: { color: colors.primary, fontFamily: fonts.bold, fontSize: 16 },
+  pagination: { marginTop: 8, gap: 4 }
+});

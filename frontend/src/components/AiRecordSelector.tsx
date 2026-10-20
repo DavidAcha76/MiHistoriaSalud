@@ -45,9 +45,9 @@ export function AiRecordSelector({ profileId, selected, onChange, disabled, medi
     const checked = ids.includes(id);
     const blocked = Boolean(disabled || (!checked && ids.length >= 50));
     return <Pressable key={id} accessibilityRole="checkbox" accessibilityLabel={title} accessibilityState={{ checked, disabled: blocked }} aria-checked={checked} disabled={blocked} onPress={() => toggle(id, ids, change)}>
-      <Card style={{ borderColor: checked ? colors.ai : colors.border, opacity: blocked ? .6 : 1 }}><View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-        <MaterialCommunityIcons name={checked ? 'checkbox-marked' : 'checkbox-blank-outline'} size={26} color={checked ? colors.ai : colors.muted} />
-        <View style={{ flex: 1 }}><Text style={{ fontWeight: '800' }}>{title}</Text><Muted>{subtitle}</Muted></View>
+      <Card style={{ borderColor: checked ? colors.ai : colors.borderSoft, backgroundColor: checked ? colors.aiSoft : colors.surface, opacity: blocked ? .6 : 1, marginBottom: 10, paddingVertical: 16 }}><View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <MaterialCommunityIcons name={checked ? 'checkbox-marked' : 'checkbox-blank-outline'} size={28} color={checked ? colors.ai : colors.muted} />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '800' }}>{title}</Text><Muted>{subtitle}</Muted></View>
       </View></Card>
     </Pressable>;
   }

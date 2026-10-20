@@ -14,6 +14,7 @@ import { AppNavigator } from './src/navigation/AppNavigator';
 import { colors, fonts } from './src/theme/colors';
 import { WebAccessibility } from './src/components/WebAccessibility';
 import { FeedbackProvider } from './src/context/FeedbackContext';
+import { BrandLogo } from './src/components/BrandLogo';
 
 export default function App() {
   const [loaded] = useFonts({
@@ -22,8 +23,8 @@ export default function App() {
     [fonts.semibold]: Manrope_600SemiBold,
     [fonts.bold]: Manrope_700Bold
   });
-  if (!loaded) return <View style={styles.loading}><StatusBar style="light" /><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (!loaded) return <View style={styles.loading}><StatusBar style="light" /><BrandLogo size={72} /><ActivityIndicator size="large" color={colors.primary} /></View>;
   return <SafeAreaProvider><WebAccessibility /><AuthProvider><ProfileProvider><FeedbackProvider><StatusBar style="light"/><AppNavigator/></FeedbackProvider></ProfileProvider></AuthProvider></SafeAreaProvider>;
 }
 
-const styles = StyleSheet.create({ loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background } });
+const styles = StyleSheet.create({ loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28, backgroundColor: colors.background } });

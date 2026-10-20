@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, Text, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -28,14 +28,16 @@ import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { MedicationScheduleScreen } from '../screens/MedicationScheduleScreen';
 import { MedicationFormScreen } from '../screens/MedicationFormScreen';
 import { AppTabBar } from '../components/AppTabBar';
+import { BrandLogo } from '../components/BrandLogo';
+import { InTabsContext, useLayout } from '../hooks/useLayout';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 const AIStack = createNativeStackNavigator();
-const navigationTheme = { ...DarkTheme, colors: { ...DarkTheme.colors, primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border, notification: colors.danger } };
+const navigationTheme = { ...DarkTheme, colors: { ...DarkTheme.colors, primary: colors.primary, background: colors.background, card: colors.backgroundDeep, text: colors.text, border: colors.borderSoft, notification: colors.danger } };
 
 function AINavigator() {
-  return <AIStack.Navigator screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold }, contentStyle: { backgroundColor: colors.background }, headerBackButtonDisplayMode: 'minimal' }}>
+  return <AIStack.Navigator screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: colors.backgroundDeep }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold }, contentStyle: { backgroundColor: colors.background }, headerBackButtonDisplayMode: 'minimal' }}>
     <AIStack.Screen name="AICenter" component={AICenterScreen} options={{ headerShown: false }} />
     <AIStack.Screen name="AIAnalysis" component={AIScreen} options={{ title: 'Revisar registros' }} />
     <AIStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Asistente de IA' }} />
@@ -44,10 +46,10 @@ function AINavigator() {
 }
 
 function MainTabs() {
-  const { width, fontScale } = useWindowDimensions();
-  return <Tabs.Navigator tabBar={(props) => <AppTabBar {...props} />} screenOptions={{
+  const { sidebarMode } = useLayout();
+  return <InTabsContext.Provider value><Tabs.Navigator tabBar={(props) => <AppTabBar {...props} />} screenOptions={{
     headerShown: false,
-    tabBarPosition: width >= 1100 && fontScale < 1.4 ? 'left' : 'bottom',
+    tabBarPosition: sidebarMode ? 'left' : 'bottom',
     animation: 'none'
   }}>
     <Tabs.Screen name="Inicio" component={HomeScreen} />
@@ -55,13 +57,13 @@ function MainTabs() {
     <Tabs.Screen name="Historial" component={TimelineScreen} />
     <Tabs.Screen name="IA" component={AINavigator} />
     <Tabs.Screen name="Más" component={MoreScreen} />
-  </Tabs.Navigator>;
+  </Tabs.Navigator></InTabsContext.Provider>;
 }
 
 export function AppNavigator() {
   const { user, loading } = useAuth();
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color={colors.primary} />;
-  return <NavigationContainer theme={navigationTheme}><Stack.Navigator screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
+  if (loading) return <View accessibilityRole="progressbar" accessibilityLabel="Abriendo Clinia" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28, backgroundColor: colors.background }}><BrandLogo size={72} /><ActivityIndicator size="large" color={colors.primary} /></View>;
+  return <NavigationContainer theme={navigationTheme}><Stack.Navigator screenOptions={({ navigation }) => ({ headerShadowVisible: false, headerStyle: { backgroundColor: colors.backgroundDeep }, headerTintColor: colors.primary, headerTitleStyle: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 }, contentStyle: { backgroundColor: colors.background }, headerBackVisible: false, headerLeft: ({ canGoBack }) => canGoBack ? <Pressable accessibilityRole="button" accessibilityLabel="Volver a la pantalla anterior" onPress={() => navigation.goBack()} style={{ minHeight: 48, paddingRight: 14, flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="chevron-left" size={26} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: fonts.bold, fontSize: 16 }}>Volver</Text></Pressable> : null })}>
     {user ? <>
       <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
       <Stack.Screen name="EventForm" component={EventFormScreen} options={{ title: 'Registrar evento' }} />

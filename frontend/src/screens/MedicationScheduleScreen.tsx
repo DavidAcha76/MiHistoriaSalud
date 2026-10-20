@@ -4,10 +4,11 @@ import { AppText as Text } from '../components/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, Disclosure, FormError, LoadingState, Muted, PrimaryButton, Screen, SecondaryButton, SectionTitle } from '../components/ui';
+import { AppTitle, Card, Disclosure, EmptyState, FormError, Grid, IconBadge, LoadingState, Muted, Pill, PrimaryButton, ProgressBar, Screen, SecondaryButton, Stat } from '../components/ui';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { ProfileSelector } from '../components/ProfileSelector';
 import { useProfiles } from '../context/ProfileContext';
+import { useLayout } from '../hooks/useLayout';
 import type { MedicationRegimen, MedicationDoseSlot } from '../types/domain';
 import { colors, fonts } from '../theme/colors';
 import { localDate, readableDate } from '../utils/presentation';
@@ -16,6 +17,7 @@ const dayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vierne
 type Confirmation = { regimen: MedicationRegimen; slot?: MedicationDoseSlot };
 export function MedicationScheduleScreen({ navigation }: any) {
   const { selectedProfile } = useProfiles();
+  const { twoColumns } = useLayout();
   const [items, setItems] = useState<MedicationRegimen[]>([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -58,37 +60,65 @@ export function MedicationScheduleScreen({ navigation }: any) {
     finally { submitting.current = false; setBusyKey(null); }
   }
 
+  const activeCount = items.filter((regimen) => regimen.isActive).length;
+  const pendingCount = items.reduce((total, regimen) => total + (regimen.isActive ? regimen.adherence.pending.length : 0), 0);
   return <Screen>
-    <AppTitle title="Mis medicamentos" subtitle="Consulta tus horarios y marca una toma solo después de haberla tomado." />
+    <AppTitle eyebrow={`Hoy · ${readableDate(localDate())}`} title="Mis medicamentos" subtitle="Consulta tus horarios y marca una toma solo después de haberla tomado." />
     <ProfileSelector />
-    <SectionTitle>Hoy · {readableDate(localDate())}</SectionTitle>
-    {message ? <Card style={{ backgroundColor: colors.primarySoft }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>✓ {message}</Text></Card> : null}
+    {!loading && items.length ? twoColumns ? <Grid min={240} gap={12}>
+      <Stat icon="pill" value={String(activeCount)} label={activeCount === 1 ? 'medicamento con recordatorio' : 'medicamentos con recordatorio'} />
+      <Stat icon="clock-alert-outline" value={String(pendingCount)} label={pendingCount === 1 ? 'toma por confirmar hoy' : 'tomas por confirmar hoy'} tone={pendingCount ? 'warning' : 'primary'} />
+    </Grid> : <View style={styles.summaryPills}>
+      <Pill icon="pill" label={`${activeCount} con recordatorio`} />
+      <Pill icon="clock-alert-outline" label={`${pendingCount} por confirmar hoy`} tone={pendingCount ? 'warning' : 'primary'} />
+    </View> : null}
+    {message ? <Card tone="primary" style={styles.message}><MaterialCommunityIcons name="check-circle" size={24} color={colors.success} /><Text accessibilityLiveRegion="polite" style={{ flex: 1, color: colors.success }}>{message}</Text></Card> : null}
     <FormError message={error} />
-    {error ? <SecondaryButton title="Volver a cargar medicamentos" onPress={() => { setLoading(true); void load(); }} /> : null}
-    {loading ? <LoadingState label="Buscando tus horarios…" /> : items.map((regimen) => <Card key={regimen.id}>
-      <View style={styles.cardHeader}><MaterialCommunityIcons name="pill" size={28} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.name}>{regimen.medicationName}</Text>{regimen.dose ? <Text style={styles.dose}>{regimen.dose}</Text> : null}</View></View>
-      <Muted>{regimen.scheduleDays.length === 7 ? 'Todos los días' : regimen.scheduleDays.map((day) => dayLabels[day]).join(' · ')} · {regimen.scheduleTimes.join(' / ')}</Muted>
-      {regimen.notes ? <Text style={{ marginTop: 10 }}>{regimen.notes}</Text> : null}
-      {!regimen.isActive ? <Text style={{ color: colors.warning, marginTop: 14 }}>Recordatorios pausados</Text> : regimen.adherence.pending.length ? <View style={styles.pending}>
-        <Text style={{ fontFamily: fonts.bold, marginBottom: 8 }}>Tomas de hoy sin confirmar</Text>
-        {regimen.adherence.pending.map((slot) => <PrimaryButton key={`${slot.scheduledDate}-${slot.scheduledTime}`} title={`Ya tomé la de las ${slot.scheduledTime}`} disabled={Boolean(busyKey) || Boolean(error)} loading={busyKey === regimen.id} onPress={() => setConfirmation({ regimen, slot })} />)}
-      </View> : <View style={styles.done}><MaterialCommunityIcons name="check-circle-outline" size={24} color={colors.success} /><Text style={{ flex: 1 }}>Por ahora no hay tomas pendientes de confirmar.</Text></View>}
+    {error ? <SecondaryButton title="Volver a cargar medicamentos" icon="refresh" onPress={() => { setLoading(true); void load(); }} /> : null}
+    {loading ? <LoadingState label="Buscando tus horarios…" /> : <Grid min={420}>{items.map((regimen) => <Card key={regimen.id}>
+      <View style={styles.cardHeader}>
+        <IconBadge icon="pill" tone={regimen.isActive ? 'primary' : 'neutral'} size={50} />
+        <View style={styles.cardCopy}><Text style={styles.name}>{regimen.medicationName}</Text>{regimen.dose ? <Text style={styles.dose}>{regimen.dose}</Text> : null}</View>
+        <Pill label={regimen.isActive ? 'Activo' : 'Pausado'} tone={regimen.isActive ? 'primary' : 'warning'} icon={regimen.isActive ? 'bell-ring-outline' : 'pause'} />
+      </View>
+      <View style={styles.schedule}><MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.muted} /><Muted style={{ flex: 1 }}>{regimen.scheduleDays.length === 7 ? 'Todos los días' : regimen.scheduleDays.map((day) => dayLabels[day]).join(' · ')}</Muted></View>
+      <View style={styles.times}>{regimen.scheduleTimes.map((time) => <View key={time} style={styles.time}><MaterialCommunityIcons name="clock-outline" size={17} color={colors.accent} /><Text style={styles.timeText}>{time}</Text></View>)}</View>
+      {regimen.notes ? <Text style={styles.notes}>{regimen.notes}</Text> : null}
+      {!regimen.isActive ? <View style={[styles.state, styles.paused]}><MaterialCommunityIcons name="bell-off-outline" size={22} color={colors.warning} /><Text style={{ flex: 1, color: colors.warning }}>Recordatorios pausados</Text></View> : regimen.adherence.pending.length ? <View style={styles.pending}>
+        <View style={styles.pendingHeading}><MaterialCommunityIcons name="clock-alert-outline" size={22} color={colors.warning} /><Text style={{ fontFamily: fonts.bold, flex: 1 }}>Tomas de hoy sin confirmar</Text></View>
+        {regimen.adherence.pending.map((slot) => <PrimaryButton key={`${slot.scheduledDate}-${slot.scheduledTime}`} title={`Ya tomé la de las ${slot.scheduledTime}`} icon="check" disabled={Boolean(busyKey) || Boolean(error)} loading={busyKey === regimen.id} onPress={() => setConfirmation({ regimen, slot })} />)}
+      </View> : <View style={[styles.state, styles.done]}><MaterialCommunityIcons name="check-circle-outline" size={24} color={colors.success} /><Text style={{ flex: 1 }}>Por ahora no hay tomas pendientes de confirmar.</Text></View>}
       <Disclosure title="Ver seguimiento y recordatorios">
-        <Text style={{ fontFamily: fonts.bold }}>Últimos 30 días</Text><Muted>{regimen.adherence.confirmed} tomas confirmadas de {regimen.adherence.total} esperadas. Este conteo no evalúa tu salud.</Muted>
-        <SecondaryButton title={regimen.isActive ? 'Pausar recordatorios' : 'Reanudar recordatorios'} onPress={() => setConfirmation({ regimen })} disabled={Boolean(busyKey) || Boolean(error)} />
+        <View style={styles.followHeading}><Text style={{ fontFamily: fonts.bold, flex: 1 }}>Últimos 30 días</Text><Text style={styles.followValue}>{regimen.adherence.confirmed}/{regimen.adherence.total}</Text></View>
+        <ProgressBar value={regimen.adherence.total ? regimen.adherence.confirmed / regimen.adherence.total : 0} label={`${regimen.adherence.confirmed} tomas confirmadas de ${regimen.adherence.total}`} />
+        <Muted style={{ marginTop: 10 }}>{regimen.adherence.confirmed} tomas confirmadas de {regimen.adherence.total} esperadas. Este conteo no evalúa tu salud.</Muted>
+        <SecondaryButton title={regimen.isActive ? 'Pausar recordatorios' : 'Reanudar recordatorios'} icon={regimen.isActive ? 'bell-off-outline' : 'bell-ring-outline'} onPress={() => setConfirmation({ regimen })} disabled={Boolean(busyKey) || Boolean(error)} />
       </Disclosure>
-    </Card>)}
-    {!loading && !error && selectedProfile && !items.length ? <Card><MaterialCommunityIcons name="pill" size={34} color={colors.primary} /><Text style={styles.emptyTitle}>Añade tu primer medicamento</Text><Muted>Guarda el nombre y el horario indicado por tu profesional. Luego podrás anotar cada toma aquí.</Muted></Card> : null}
+    </Card>)}</Grid>}
+    {!loading && !error && selectedProfile && !items.length ? <EmptyState icon="pill" title="Añade tu primer medicamento" text="Guarda el nombre y el horario indicado por tu profesional. Luego podrás anotar cada toma aquí." /> : null}
     <PrimaryButton title="+ Añadir un medicamento" onPress={() => navigation.navigate('MedicationForm')} disabled={!selectedProfile || Boolean(busyKey)} />
-    <Muted>Los recordatorios se consultan dentro de la app. Sigue siempre la pauta indicada por tu profesional.</Muted>
+    <View style={styles.footnote}><MaterialCommunityIcons name="information-outline" size={20} color={colors.muted} /><Muted style={{ flex: 1 }}>Los recordatorios se consultan dentro de la app. Sigue siempre la pauta indicada por tu profesional.</Muted></View>
     <ConfirmationDialog visible={Boolean(confirmation)} title={confirmation?.slot ? '¿Ya tomaste este medicamento?' : confirmation?.regimen.isActive ? '¿Pausar los recordatorios?' : '¿Reanudar los recordatorios?'} message={confirmation ? `${confirmation.regimen.medicationName}${confirmation.regimen.dose ? ` · ${confirmation.regimen.dose}` : ''}\n${confirmation.slot ? `Toma de las ${confirmation.slot.scheduledTime}, ${readableDate(confirmation.slot.scheduledDate)}. Confirma solo si ya la tomaste.` : 'Esto cambia los avisos de la app. No cambia tu tratamiento.'}` : ''} confirmTitle={confirmation?.slot ? 'Sí, ya la tomé' : 'Sí, cambiar recordatorios'} onConfirm={() => { void performAction(); }} onCancel={() => setConfirmation(null)} />
   </Screen>;
 }
 const styles = StyleSheet.create({
-  cardHeader: { flexDirection: 'row', gap: 14, alignItems: 'center', marginBottom: 12 },
-  name: { fontFamily: fonts.bold, fontSize: 23, lineHeight: 33 },
-  dose: { color: colors.accent, marginTop: 4 },
-  pending: { marginTop: 20, padding: 16, backgroundColor: colors.primarySoft, borderRadius: 14 },
-  done: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, padding: 14, backgroundColor: colors.primarySoft, borderRadius: 14 },
-  emptyTitle: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 32, marginVertical: 14 }
+  summaryPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  message: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardHeader: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 14 },
+  cardCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0 },
+  name: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 30, letterSpacing: -0.3 },
+  dose: { color: colors.accent, marginTop: 2 },
+  schedule: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  times: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  time: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: '#3A5F7A' },
+  timeText: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 22 },
+  notes: { marginTop: 12 },
+  state: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, padding: 14, borderRadius: 16 },
+  paused: { backgroundColor: colors.warningSoft },
+  done: { backgroundColor: colors.primarySoft },
+  pending: { marginTop: 18, padding: 16, paddingBottom: 8, backgroundColor: colors.warningSoft, borderRadius: 16, borderWidth: 1, borderColor: '#6A5B39' },
+  pendingHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  followHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  followValue: { fontFamily: fonts.bold, color: colors.primary },
+  footnote: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 8 }
 });

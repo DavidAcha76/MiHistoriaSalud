@@ -5,9 +5,10 @@
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "dark",
-    "icon": "./assets/brand/clinia-logo.png",
+    "backgroundColor": "#0C1B24",
+    "icon": "./assets/brand/clinia-icon.png",
     "splash": {
-      "image": "./assets/brand/clinia-logo.png",
+      "image": "./assets/brand/clinia-splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0C1B24"
     },
@@ -15,7 +16,7 @@
       "package": "com.hermesoft.mihistoriasalud",
       "permissions": [],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/brand/clinia-logo.png",
+        "foregroundImage": "./assets/brand/clinia-adaptive-icon.png",
         "backgroundColor": "#0C1B24"
       }
     },
@@ -30,7 +31,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/brand/clinia-logo.png"
+      "favicon": "./assets/brand/clinia-favicon.png"
     }
   }
 }

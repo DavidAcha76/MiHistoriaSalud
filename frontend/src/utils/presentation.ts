@@ -1,4 +1,5 @@
 import type { EventType } from '../types/domain';
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export const eventLabels: Record<EventType, string> = {
   SYMPTOM: 'Molestia o síntoma', CONSULTATION: 'Consulta médica', MEDICATION: 'Medicamento', LAB_RESULT: 'Resultado de examen',
@@ -27,4 +28,27 @@ export function readableDate(value?: string) {
   if (!value) return 'Sin fecha';
   const date = new Date(`${value.slice(0, 10)}T12:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-BO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+export const eventIcons: Record<EventType, IconName> = {
+  SYMPTOM: 'heart-pulse', CONSULTATION: 'stethoscope', MEDICATION: 'pill', LAB_RESULT: 'flask-outline', ANTECEDENT: 'history', DIAGNOSIS: 'clipboard-check-outline',
+  TREATMENT: 'medical-bag', ALLERGY: 'alert-circle-outline', VACCINE: 'needle', SURGERY: 'hospital-box-outline', OTHER: 'plus-circle-outline'
+};
+export const eventIcon = (value?: string): IconName => eventIcons[value as EventType] || 'clipboard-text-outline';
+const eventTones: Record<EventType, 'primary' | 'accent' | 'ai' | 'warning'> = {
+  SYMPTOM: 'warning', CONSULTATION: 'primary', MEDICATION: 'primary', LAB_RESULT: 'accent', ANTECEDENT: 'accent', DIAGNOSIS: 'ai',
+  TREATMENT: 'primary', ALLERGY: 'warning', VACCINE: 'accent', SURGERY: 'ai', OTHER: 'primary'
+};
+export const eventTone = (value?: string) => eventTones[value as EventType] || 'primary';
+/** Día y mes abreviado para la columna de fechas del historial. */
+export function dateParts(value?: string) {
+  const date = new Date(`${(value || '').slice(0, 10)}T12:00:00`);
+  if (!value || Number.isNaN(date.getTime())) return { day: '—', month: '', year: '' };
+  return { day: String(date.getDate()), month: date.toLocaleDateString('es-BO', { month: 'short' }).replace('.', '').toUpperCase(), year: String(date.getFullYear()) };
+}
+/** Fecha de hoy para cabeceras: «Lunes, 20 de octubre». */
+export function todayLabel() {
+  const label = new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }

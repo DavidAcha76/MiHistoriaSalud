@@ -38,7 +38,7 @@ function AnalysisForProfile({ navigation }: any) {
     finally { await refresh(); setLoading(false); inFlight.current = false; }
   }
   return <Screen>
-    <AppTitle title="Revisar mis registros" subtitle="Elige la información que quieres resumir y las preguntas que quieres preparar para tu consulta." />
+    <AppTitle eyebrow="Revisión informativa" title="Revisar mis registros" subtitle="Elige la información que quieres resumir y las preguntas que quieres preparar para tu consulta." />
     <ProfileSelector />
     {fetching ? <LoadingState /> : null}
     {error ? <><FormError message={error} /><SecondaryButton title="Volver a cargar" onPress={refresh} /></> : null}
@@ -49,7 +49,7 @@ function AnalysisForProfile({ navigation }: any) {
     <Field label="Finalidad de la revisión" value={purpose} onChangeText={setPurpose} maxLength={300} hint="Entre 3 y 300 caracteres." editable={canAnalyze} />
     <SectionTitle>Selecciona registros</SectionTitle>
     {profileId ? <AiRecordSelector profileId={profileId} selected={selected} onChange={setSelected} disabled={loading} /> : null}
-    <PrimaryButton title={`Revisar ${selected.length} registro(s)`} onPress={analyze} disabled={!canAnalyze || !selected.length || purpose.trim().length < 3} loading={loading} />
-    <SecondaryButton title="Ver mis revisiones guardadas" onPress={() => navigation.navigate('AIHistory')} />
+    <PrimaryButton title={`Revisar ${selected.length} registro(s)`} icon="text-box-search-outline" onPress={analyze} disabled={!canAnalyze || !selected.length || purpose.trim().length < 3} loading={loading} />
+    <SecondaryButton title="Ver mis revisiones guardadas" icon="history" onPress={() => navigation.navigate('AIHistory')} />
   </Screen>;
 }

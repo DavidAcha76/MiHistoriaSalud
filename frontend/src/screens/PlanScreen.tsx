@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { AppText as Text } from '../components/AppText';
 import { AppAlert as Alert } from '../utils/alerts';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { apiRequest } from '../api/client';
-import { AppTitle, Card, FormError, Muted, PrimaryButton, Screen, SectionTitle, SecondaryButton } from '../components/ui';
+import { AppTitle, Card, FormError, Grid, IconBadge, Muted, Pill, PrimaryButton, Screen, SectionTitle, SecondaryButton, useGridColumns } from '../components/ui';
 import { ProfileSelector } from '../components/ProfileSelector';
 import { useProfileResource } from '../hooks/useProfileResource';
 import type { PlanCode, PlanStatus } from '../types/domain';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const plans: Array<{ code: PlanCode; title: string; monthlyPrice: number; icon: keyof typeof MaterialCommunityIcons.glyphMap; benefits: string[] }> = [
   { code: 'FREE', title: 'Gratis', monthlyPrice: 0, icon: 'leaf-circle-outline', benefits: ['1 análisis informativo y 10 mensajes por semana por cuenta', 'Renovación los lunes a las 00:00 de Bolivia; no acumulables'] },
@@ -72,17 +72,19 @@ export function PlanScreen({ navigation }: any) {
     } catch (error: any) { Alert.alert('No se pudo reanudar', error.message); } finally { setBusy(null); }
   }
 
+  const infoColumns = useGridColumns(300) > 1;
+  const planColumns = useGridColumns(280) > 1;
   const activePlan = status?.plan;
   const hasPaidPlan = activePlan?.code === 'SILVER' || activePlan?.code === 'GOLD';
 
   return <Screen>
-    <AppTitle title="Plan de Clinia" subtitle="Elige un plan visible y simple. Los montos, ciclos y renovaciones que ves aquí son una simulación mensual." />
+    <AppTitle eyebrow="Suscripción simulada" title="Plan de Clinia" subtitle="Elige un plan visible y simple. Los montos, ciclos y renovaciones que ves aquí son una simulación mensual." />
     <ProfileSelector />
-    {error ? <><FormError message={error} /><SecondaryButton title="Volver a cargar el plan" onPress={load} /></> : null}
-    {activePlan ? <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primary }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name={activePlan.code === 'GOLD' ? 'crown-outline' : activePlan.code === 'SILVER' ? 'medal-outline' : 'leaf-circle-outline'} size={26} color={colors.primary} /></View>
-        <View style={{ flex: 1 }}><Text style={{ color: colors.primary, fontWeight: '900', fontSize: 18 }}>Plan {activePlan.name}</Text><Muted>{price(activePlan.monthlyPrice)} · Simulación sin cobro</Muted></View>
+    {error ? <><FormError message={error} /><SecondaryButton title="Volver a cargar el plan" icon="refresh" onPress={load} /></> : null}
+    {activePlan ? <Card tone="hero">
+      <View style={styles.currentHeading}>
+        <IconBadge icon={activePlan.code === 'GOLD' ? 'crown-outline' : activePlan.code === 'SILVER' ? 'medal-outline' : 'leaf-circle-outline'} tone={activePlan.code === 'GOLD' ? 'warning' : 'primary'} size={52} />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.currentName}>Plan {activePlan.name}</Text><Muted>{price(activePlan.monthlyPrice)} · Simulación sin cobro</Muted></View>
       </View>
       {hasPaidPlan ? <>
         <Muted>Período actual: {formatDate(activePlan.subscription.currentPeriodStart)} — {formatDate(activePlan.subscription.currentPeriodEnd)}</Muted>
@@ -91,21 +93,43 @@ export function PlanScreen({ navigation }: any) {
     </Card> : !error ? <Card><Muted>{profileId ? 'Cargando el plan…' : 'Selecciona un perfil para consultar tu plan.'}</Muted></Card> : null}
 
     <SectionTitle>Planes mensuales simulados</SectionTitle>
-    <Card style={{ backgroundColor: colors.aiSoft, borderColor: colors.ai }}><Text style={{ color: colors.ai, fontWeight: '900' }}>Sin tarjeta ni pasarela de pago</Text><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
-    <Card><Text style={{ fontWeight: '900' }}>Beneficios al subir de plan</Text><Muted>Pasar de Gratis a Plata u Oro, o de Plata a Oro, habilita un análisis inmediato y el cupo completo de chat de ese plan para cada perfil. Seleccionar el mismo plan, bajar de plan o cancelar y reanudar no repone el consumo. Volver a Gratis conserva los usos de la semana.</Muted></Card>
-    {plans.map((plan) => <Card key={plan.code} style={{ borderColor: activePlan?.code === plan.code ? colors.primary : colors.border, backgroundColor: activePlan?.code === plan.code ? colors.primarySoft : colors.surface }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><MaterialCommunityIcons name={plan.icon} size={26} color={plan.code === 'GOLD' ? colors.warning : colors.primary} /><View style={{ flex: 1 }}><Text style={{ fontSize: 19, fontWeight: '900', color: colors.text }}>{plan.title}</Text><Text style={{ color: colors.primary, fontWeight: '900', marginTop: 1 }}>{price(plan.monthlyPrice)}</Text></View>{activePlan?.code === plan.code ? <Text style={{ color: colors.primary, fontWeight: '900' }}>ACTUAL</Text> : null}</View>
-      {plan.benefits.map((benefit) => <Muted key={benefit}>• {benefit}</Muted>)}
-      {plan.code === 'FREE' ? <SecondaryButton title={activePlan?.code === 'FREE' ? 'Plan actual' : 'Incluido sin costo'} onPress={() => {}} disabled /> : <PrimaryButton title={busy === plan.code ? 'Activando…' : activePlan?.code === plan.code ? 'Plan actual' : `Simular ${plan.title} por ${price(plan.monthlyPrice)}`} disabled={!activePlan || Boolean(busy) || activePlan.code === plan.code} loading={busy === plan.code} onPress={() => confirmActivation(plan)} />}
-    </Card>)}
+    <Grid min={300}>
+      <Card tone="ai" style={infoColumns && styles.stretch}><View style={styles.infoHeading}><MaterialCommunityIcons name="credit-card-off-outline" size={22} color={colors.ai} /><Text style={{ color: colors.ai, fontWeight: '900', flex: 1 }}>Sin tarjeta ni pasarela de pago</Text></View><Muted>Al activar un plan se crea un mes simulado. La fecha de renovación y la cancelación se comportan como una suscripción, pero no hay cobro real.</Muted></Card>
+      <Card style={infoColumns && styles.stretch}><View style={styles.infoHeading}><MaterialCommunityIcons name="arrow-up-bold-circle-outline" size={22} color={colors.primary} /><Text style={{ fontWeight: '900', flex: 1 }}>Beneficios al subir de plan</Text></View><Muted>Pasar de Gratis a Plata u Oro, o de Plata a Oro, habilita un análisis inmediato y el cupo completo de chat de ese plan para cada perfil. Seleccionar el mismo plan, bajar de plan o cancelar y reanudar no repone el consumo. Volver a Gratis conserva los usos de la semana.</Muted></Card>
+    </Grid>
+    <Grid min={280}>{plans.map((plan) => {
+      const current = activePlan?.code === plan.code;
+      const tone = plan.code === 'GOLD' ? 'warning' : plan.code === 'SILVER' ? 'accent' : 'primary';
+      return <Card key={plan.code} style={[styles.planCard, planColumns && styles.stretch, current && styles.planCurrent]}>
+        <View style={styles.planHeading}><IconBadge icon={plan.icon} tone={tone} size={50} />{current ? <Pill label="ACTUAL" icon="check" /> : null}</View>
+        <Text style={styles.planTitle}>{plan.title}</Text>
+        <Text style={styles.planPrice}>{price(plan.monthlyPrice)}</Text>
+        <View style={styles.benefits}>{plan.benefits.map((benefit) => <View key={benefit} style={styles.benefit}><MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.primary} /><Muted style={{ flex: 1 }}>{benefit}</Muted></View>)}</View>
+        {plan.code === 'FREE' ? <SecondaryButton title={activePlan?.code === 'FREE' ? 'Plan actual' : 'Incluido sin costo'} onPress={() => {}} disabled /> : <PrimaryButton title={busy === plan.code ? 'Activando…' : current ? 'Plan actual' : `Simular ${plan.title} por ${price(plan.monthlyPrice)}`} disabled={!activePlan || Boolean(busy) || activePlan.code === plan.code} loading={busy === plan.code} onPress={() => confirmActivation(plan)} />}
+      </Card>;
+    })}</Grid>
 
     <SectionTitle>Administrar suscripción</SectionTitle>
-    {hasPaidPlan ? <Card style={{ borderColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warning : colors.border, backgroundColor: activePlan?.subscription.cancelAtPeriodEnd ? colors.warningSoft : colors.surface }}>
+    {hasPaidPlan ? <Card tone={activePlan?.subscription.cancelAtPeriodEnd ? 'warning' : undefined}>
       <Text style={{ color: colors.text, fontWeight: '900' }}>{activePlan?.subscription.cancelAtPeriodEnd ? 'Tu cancelación está programada' : '¿Quieres cancelar este plan?'}</Text>
       <Muted>{activePlan?.subscription.cancelAtPeriodEnd ? `Mantendrás ${activePlan?.name} hasta el ${formatDate(activePlan?.subscription.currentPeriodEnd || null)}. Puedes reanudar antes de esa fecha.` : 'Cancelar no reduce tus beneficios inmediatamente: el cambio a Gratis ocurre al cerrar el período mensual simulado.'}</Muted>
       {activePlan?.subscription.cancelAtPeriodEnd ? <PrimaryButton title={busy === 'resume' ? 'Reanudando…' : 'Reanudar renovación simulada'} onPress={resumePlan} loading={busy === 'resume'} disabled={Boolean(busy)} /> : <PrimaryButton title={busy === 'cancel' ? 'Programando…' : 'Cancelar plan al finalizar el período'} onPress={confirmCancellation} loading={busy === 'cancel'} disabled={Boolean(busy)} danger />}
     </Card> : <Card><Text style={{ color: colors.text, fontWeight: '900' }}>No tienes un plan de pago activo</Text><Muted>El plan Gratis no se cobra y no requiere cancelación.</Muted></Card>}
 
-    <SecondaryButton title="Ir al centro de IA: uso y permisos" onPress={() => navigation.navigate('Main', { screen: 'IA', params: { screen: 'AICenter' } })} />
+    <SecondaryButton title="Ir al centro de IA: uso y permisos" icon="creation-outline" onPress={() => navigation.navigate('Main', { screen: 'IA', params: { screen: 'AICenter' } })} />
   </Screen>;
 }
+
+const styles = StyleSheet.create({
+  currentHeading: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 6 },
+  currentName: { color: colors.primary, fontFamily: fonts.bold, fontSize: 20, lineHeight: 28 },
+  stretch: { flex: 1 },
+  infoHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  planCard: { gap: 4 },
+  planCurrent: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  planHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
+  planTitle: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 29, color: colors.text },
+  planPrice: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 34, letterSpacing: -0.4, color: colors.primary },
+  benefits: { gap: 8, marginTop: 10, marginBottom: 8, flexGrow: 1 },
+  benefit: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }
+});

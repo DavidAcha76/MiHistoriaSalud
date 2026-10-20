@@ -10,7 +10,9 @@ import { localDate } from '../utils/presentation';
 import { DateField } from '../components/DateField';
 import { useProfiles } from '../context/ProfileContext';
 import type { EventType } from '../types/domain';
-import { colors, fonts } from '../theme/colors';
+import { colors, fonts, shadows } from '../theme/colors';
+import { shadow } from '../theme/effects';
+import { useLayout } from '../hooks/useLayout';
 
 type EventTypeOption = {
   value: EventType;
@@ -93,6 +95,8 @@ function StatusSelector({ eventType, value, onChange }: { eventType: EventType; 
 
 function EventTypePicker({ value, disabled, onChange }: { value: EventType; disabled?: boolean; onChange: (value: EventType) => void }) {
   const [visible, setVisible] = useState(false);
+  const { width, largeText } = useLayout();
+  const twoUp = width >= 600 && !largeText;
   const selected = typeOptions.find((option) => option.value === value) || typeOptions[0];
   const selectType = (next: EventType) => {
     onChange(next);
@@ -116,7 +120,7 @@ function EventTypePicker({ value, disabled, onChange }: { value: EventType; disa
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.typeGrid}>
             {typeOptions.map((option) => {
               const isSelected = option.value === value;
-              return <Pressable key={option.value} accessibilityRole="button" accessibilityState={{ selected: isSelected }} accessibilityLabel={`${option.label}. ${option.hint}`} onPress={() => selectType(option.value)} style={({ pressed }) => [styles.typeCard, isSelected && styles.typeCardSelected, pressed && styles.typeCardPressed]}>
+              return <Pressable key={option.value} accessibilityRole="button" accessibilityState={{ selected: isSelected }} accessibilityLabel={`${option.label}. ${option.hint}`} onPress={() => selectType(option.value)} style={({ pressed }) => [styles.typeCard, twoUp && styles.typeCardHalf, isSelected && styles.typeCardSelected, pressed && styles.typeCardPressed]}>
                 <View style={[styles.typeCardIcon, isSelected && styles.typeCardIconSelected]}><MaterialCommunityIcons name={option.icon} size={23} color={isSelected ? colors.background : colors.primary} /></View>
                 <Text style={styles.typeCardTitle}>{option.label}</Text>
                 <Text style={styles.typeCardHint}>{option.hint}</Text>
@@ -226,15 +230,16 @@ const styles = StyleSheet.create({
   changeType: { flexDirection: 'row', alignItems: 'center' },
   changeTypeText: { color: colors.primary, fontFamily: fonts.bold, fontSize: 16 },
   typeLockedHint: { color: colors.muted, fontFamily: fonts.regular, fontSize: 16, lineHeight: 25, marginTop: 6 },
-  typeModal: { flex: 1, justifyContent: 'center', padding: 16, backgroundColor: 'rgba(0, 0, 0, .72)' },
-  typeSheet: { width: '100%', maxWidth: 640, alignSelf: 'center', maxHeight: '90%', backgroundColor: colors.background, borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 24, overflow: 'hidden' },
+  typeModal: { flex: 1, justifyContent: 'center', padding: 16, backgroundColor: 'rgba(4, 10, 14, 0.78)' },
+  typeSheet: { width: '100%', maxWidth: 680, alignSelf: 'center', maxHeight: '90%', backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 26, overflow: 'hidden', ...shadow(shadows.raised) },
   typeSheetHeader: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   typeSheetHeaderCopy: { flex: 1 },
   typeSheetTitle: { color: colors.text, fontFamily: fonts.bold, fontSize: 21, lineHeight: 27, letterSpacing: -.4 },
   typeSheetSubtitle: { maxWidth: 300, color: colors.muted, fontFamily: fonts.regular, fontSize: 16, lineHeight: 25, marginTop: 3 },
   closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 14, backgroundColor: colors.surface },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, paddingHorizontal: 20, paddingBottom: 34 },
-  typeCard: { width: '100%', minHeight: 100, padding: 13, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.surface },
+  typeCard: { width: '100%', minHeight: 100, padding: 14, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: 18, backgroundColor: colors.surface },
+  typeCardHalf: { width: '48.6%' },
   typeCardSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   typeCardPressed: { opacity: .86, transform: [{ scale: .985 }] },
   typeCardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceRaised, marginBottom: 9 },
